@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from personal_dot.agent_runtime import AgentPaused, get_agent_runtime
 from personal_dot.agent_service import AgentExecutionError
+from personal_dot.check_in import execute_check_in
 from personal_dot.config import get_settings
 from personal_dot.db import SessionLocal
 from personal_dot.memory_service import get_memory_service
@@ -30,6 +31,9 @@ class TaskExecutionResult:
 
 
 def _perform(task: Task) -> TaskExecutionResult | AgentPaused:
+    if task.type == TaskType.PROJECT_CHECK_IN:
+        check_in = execute_check_in(task)
+        return TaskExecutionResult(result=check_in.result, metadata=check_in.metadata)
     if task.type == TaskType.FAIL:
         raise RuntimeError("requested test failure")
     if task.type == TaskType.AGENT:

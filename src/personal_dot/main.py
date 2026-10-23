@@ -11,7 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from personal_dot.db import get_db
-from personal_dot.models import Task, TaskStatus
+from personal_dot.check_in import CheckInInputError, prepare_check_in
+from personal_dot.models import Task, TaskStatus, TaskType
 from personal_dot.memory_routes import router as memory_router
 from personal_dot.notification_routes import router as notification_router
 from personal_dot.queue import get_redis
@@ -61,10 +62,25 @@ def health(db: DatabaseSession) -> HealthResponse | JSONResponse:
 @app.post("/tasks", response_model=TaskRead, status_code=status.HTTP_202_ACCEPTED)
 def create_task(request: TaskCreate, db: DatabaseSession) -> Task:
     attempted_at = datetime.now(UTC)
+    payload = request.payload
+    if request.type == TaskType.PROJECT_CHECK_IN:
+        try:
+            payload = prepare_check_in(payload, db)
+        except CheckInInputError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        except Exception:
+            # SQL errors may contain private priority values in query parameters.
+            logger.error(
+                "Project check-in input preparation failed",
+                extra={"event": "check_in_prepare_failed"},
+            )
+            raise HTTPException(
+                status_code=503, detail="project check-in inputs could not be prepared"
+            ) from None
     task = Task(
         type=request.type,
         status=TaskStatus.QUEUED,
-        payload=request.payload,
+        payload=payload,
         notification_policy=request.notification_policy,
         enqueue_attempted_at=attempted_at,
     )

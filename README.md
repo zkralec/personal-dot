@@ -18,6 +18,7 @@ database.
 - Provider-neutral notification service with a Pushover adapter
 - Fixed agent tool registry with durable call audits and approval/resume APIs
 - Explicit persistent memory with deterministic ID/type/tag selection
+- Manual project check-ins with bounded source snapshots and validated recommendations
 - Alembic one-shot migration service
 - Pytest integration tests against real PostgreSQL and Redis
 
@@ -149,6 +150,87 @@ curl --fail --request POST http://127.0.0.1:8000/tasks \
 The task result is committed before notification delivery. Notification audit
 data is then recorded under `execution_metadata.notification`; delivery failure
 does not change the task's result or terminal status.
+
+## Manual Project Check-In
+
+Apply migrations and rebuild the API/worker after updating the application:
+
+```bash
+docker compose build api worker migrate
+docker compose run --rm migrate
+docker compose up -d api worker
+```
+
+Configure `OPENAI_API_KEY` in the ignored `.env` file as described above. Running
+a real check-in makes one paid model request. Development tests use stub
+providers and never require a real key or send a notification.
+
+Create a project note through the existing memory API. This example captures its
+ID using Python 3; existing `project_note` memory IDs work as well:
+
+```bash
+CHECK_IN_NOTE_ID=$(curl --fail --silent --show-error \
+  --request POST http://127.0.0.1:8000/memories \
+  --header 'Content-Type: application/json' \
+  --data '{"type":"project_note","content":"The project check-in has no input-size guard yet. A boundary test is also missing.","source":"manual","tags":["personal-dot"]}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+
+curl --fail --request POST http://127.0.0.1:8000/tasks \
+  --header 'Content-Type: application/json' \
+  --data "{\"type\":\"project_check_in\",\"payload\":{\"project_id\":\"personal-dot\",\"note_ids\":[\"$CHECK_IN_NOTE_ID\"],\"priorities\":[\"Bound project inputs before accepting a check-in.\"]},\"notification_policy\":\"none\"}"
+
+# Replace TASK_ID with the returned task ID; poll until succeeded or failed.
+curl --fail http://127.0.0.1:8000/tasks/TASK_ID
+```
+
+Each request covers one project key (`project_id`, a lowercase slug of up to 64
+characters), 1–10 unique, enabled `project_note` IDs, and 1–5 nonblank priorities
+of at most 500 characters each. Selection is explicit; no files, repositories,
+tags, or other memories are crawled. A note may contain at most 5,000 characters.
+The serialized context, including identities and any reused prior result, is
+capped at 24,000 characters. Missing, disabled, wrong-type, empty, duplicate, and
+oversized inputs return HTTP 422 before a task is queued.
+
+The API snapshots the accepted note contents, timestamps, SHA-256 hashes, and
+priorities in `task.payload`. Stable IDs are `memory:<uuid>`,
+`priority:<project_id>:<position>`, and `task:<uuid>` for prior results. The exact
+context hash is recorded in `execution_metadata.check_in`. Edits, disabling, or
+deleting a memory after submission do not erase or change an already accepted
+task snapshot; task records/backups contain private input data.
+
+At submission, the application may reuse the latest successful `ready` result
+with the same project key, exact note-ID set, and exact ordered priorities.
+Failed, insufficient, and unrelated results are excluded. Prior results are
+labelled untrusted model inferences, and omitted if they would exceed the context
+budget. This uses ordinary task queries, with no semantic memory.
+
+The worker calls the existing model adapter with tools disabled, at most 2,048
+output tokens, a 60-second SDK timeout, and no SDK retries. Smaller configured
+limits still apply; the existing RQ job timeout bounds the whole job.
+Transport/recovery remains at least once: a
+worker crash can cause a later request for the same task. The result must be
+valid JSON with:
+
+- `schema_version: 1`, a short `summary`, `blockers`, and `uncertainty`;
+- `status: "ready"` and one `recommended_action` with `kind`, `description`,
+  `rationale`, and `source_ids`; or `status: "insufficient_information"`, a null
+  action, and nonempty uncertainty;
+- `supporting_source_ids` containing every cited source. Blockers require current
+  note evidence; an action requires a current note and a supplied priority.
+
+Action kinds are advisory: `advance_priority`, `resolve_blocker`, and
+`clarify_context`. No action is executed. Schema and citation checks reject
+invalid output; they cannot prove that a model's interpretation is correct.
+Model/validation failures persist a safe task error, and summaries remain task
+results rather than becoming user preferences or new memories.
+
+Notifications default to `none`. An explicit `on_completion` policy opts in to
+the existing status-only Pushover notification after the result commits; provider
+failure is audited without changing the result or terminal status. A successful
+insufficient-information result also counts as task completion. Notifications do
+not include the recommendation or note text and remain best effort, with no
+delivery retry/outbox. Check-ins cannot be created through `/schedules`, and the
+database also rejects check-in schedules. Recurring execution remains disabled.
 
 ## Configure Pushover
 

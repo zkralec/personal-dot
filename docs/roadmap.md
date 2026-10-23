@@ -60,6 +60,16 @@ listed below.
 - Opt-in untrusted memory context for agent tasks with selection metadata.
 - No embeddings, vector database, implicit recall, or automatic memory writes.
 
+## V1.6: Manual Project Check-In
+
+- Manual `project_check_in` tasks with explicit project-note IDs and priorities.
+- Bounded accepted-input snapshots, stable source IDs, and content hashes.
+- Deterministic reuse of relevant successful task results without semantic memory.
+- Model tools disabled; validated sourced recommendations or insufficient context.
+- Results remain task results; optional status notifications remain independent.
+- API and database reject check-in schedules; recurring execution stays disabled.
+- Synthetic provider tests cover the manual API/queue/worker workflow and errors.
+
 ## Next: Harden the Core
 
 - Add durable task-attempt/audit-event records.

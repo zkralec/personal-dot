@@ -60,6 +60,8 @@ src/personal_dot/
   config.py              environment-backed settings
   agent_service.py       isolated OpenAI Responses API adapter
   agent_runtime.py       validated tool-call, audit, pause, and resume lifecycle
+  check_in.py            bounded manual input snapshots and tool-free generation
+  check_in_schemas.py    check-in request, snapshot, and validated result contracts
   db.py                  SQLAlchemy engine/session/base
   jobs.py                worker entry points and state transitions
   main.py                FastAPI application and routes
@@ -92,7 +94,8 @@ queued -> running -> succeeded
 ```
 
 Timestamps use timezone-aware UTC values. Payload and result are JSON objects.
-The API supports `echo`, an intentional `fail` handler, and `agent`. Agent tasks
+The API supports `echo`, an intentional `fail` handler, `agent`, and manual
+`project_check_in` tasks. Agent tasks
 require an instruction and accept optional textual context. Model output is
 stored as untrusted text and is never executed.
 
@@ -148,6 +151,38 @@ Memory APIs support create, list/filter, inspect, patch (including re-enable),
 explicit disable, and hard delete. Deletion removes the authoritative memory
 row. It cannot retract content already sent to OpenAI or already placed in an
 in-progress paused task's private continuation state.
+
+## Manual Project Check-Ins
+
+`POST /tasks` accepts `type=project_check_in` with one `project_id`, explicit
+`project_note` memory IDs, and inline priorities. The API gathers these inputs
+with a bounded SQL query, validates their type/enabled/content limits, and
+snapshots them in the existing task JSON payload before queueing. The
+`check_in_schemas.py` contracts and `check_in.py` orchestration own this narrow
+workflow. It does not use the generic additive memory selector or tool runtime.
+
+Source IDs are stable memory UUIDs and project/position priority IDs. Source
+content hashes, update timestamps, capture time, and a hash of the exact rendered
+context make accepted inputs inspectable even if memories later change or are
+deleted. Snapshots are intentionally sensitive task data. The latest successful
+ready check-in for the same project, note set, and ordered priorities may be
+snapshotted as prior untrusted inference; at most five candidates are inspected,
+and prior context is omitted when it would exceed the 24,000-character budget.
+
+The worker uses `AgentService.execute` directly, with one model request, no tool
+definitions, no SDK retries, and capped request/output budgets. Local validation
+requires a versioned summary, sourced blockers, one sourced advisory action (or
+an explicit insufficient-information outcome), supporting IDs, and uncertainty.
+Unknown citations, unsupported action kinds, invalid JSON, excess output, or an
+unexpected tool call fail safely. Current-note and priority references constrain
+provenance; they do not establish semantic truth. Generated results are never
+promoted to persistent memories.
+
+Existing task/result commits and notification isolation are reused. Notification
+policy remains explicit and defaults to none; opt-in notifications remain
+status-only and best effort. Migration `0007` permits the new task type and adds
+a schedule constraint excluding it. Both API validation and the worker enforce
+manual-only check-ins; no recurring execution is enabled.
 
 ## Tool and Permission Execution
 

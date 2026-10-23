@@ -1,5 +1,120 @@
 # Personal Dot implementation baseline
 
+## Current status: manual project check-in
+
+Updated 2026-10-23 from audited baseline `82fef95`. The manual check-in is now
+implemented in [check_in.py](../src/personal_dot/check_in.py) and
+[check_in_schemas.py](../src/personal_dot/check_in_schemas.py), using the existing
+task API, PostgreSQL task/results, memory records, model adapter, RQ execution,
+and independent notification service. No dependency was added. Migration
+[0007](../alembic/versions/0007_add_project_check_in.py) extends the task-type
+constraint and prohibits scheduled check-ins. No existing migration was edited.
+
+Implemented behavior:
+
+- `POST /tasks` with `type=project_check_in` accepts one project slug, 1–10 unique
+  enabled project-note memory IDs, and 1–5 nonblank priorities. Missing, disabled,
+  wrong-type, empty, duplicate, or oversized inputs are rejected before queueing.
+- Application code loads only those notes. Each accepted task retains note text,
+  timestamps, SHA-256 hashes, priorities, capture time, and the exact context hash.
+  Stable source IDs use `memory:<uuid>`, `priority:<project_id>:<position>`, and
+  `task:<uuid>`. Edits/deletion after submission do not alter queued snapshots.
+- Deterministic prior-result reuse selects the latest schema-valid successful
+  `ready` result matching the exact project, note-ID set, and ordered priorities,
+  inspecting at most five candidates. It is copied as untrusted prior inference,
+  excluded for failed/insufficient/unrelated results, and omitted if too large.
+- Serialized context is capped at 24,000 characters. Notes are capped at 5,000
+  characters, priorities at 500 characters, and model JSON at 8,000 characters.
+  The model adapter permits one request per execution attempt, at most 2,048
+  output tokens and a 60-second SDK timeout, with no SDK retries. Smaller
+  configured limits apply; the existing RQ timeout bounds the entire job.
+  Existing crash recovery remains at least once.
+- Model tools are disabled. The generic approval runtime is bypassed. Unexpected
+  function calls, malformed output, unknown sources, unsupported action kinds,
+  missing action evidence, and snapshot integrity failures produce safe errors.
+  Input-preparation failures use a fixed HTTP 503 diagnostic. The broader
+  generic-task safe-error issue in the historical audit remains open.
+- Results contain a short summary, sourced blockers, one advisory recommended
+  action, supporting source IDs, and uncertainty. An explicit insufficient-data
+  outcome requires uncertainty and no action. Actions cite current notes and a
+  supplied priority. Source/schema validation does not prove factual grounding.
+- Summaries stay in task results; no preferences or memories are inferred or
+  written. Notifications default to none. Explicit opt-in uses the existing
+  status-only provider after result commit; send failure cannot change the
+  completed result. Delivery remains best effort. API/schema/worker guards keep
+  recurring execution disabled.
+
+The exact runnable request, result semantics, and privacy/retention implications
+are documented in [README: Manual Project Check-In](../README.md#manual-project-check-in).
+
+Verification evidence (2026-10-23):
+
+- Full isolated suite: **84 passed, 1 skipped**, 85 collected, in 10.21 seconds.
+  The skipped case is the deliberately gated paid OpenAI integration test.
+  [test_check_in.py](../tests/test_check_in.py) adds 37 cases covering snapshots,
+  explicit selection/bounds, prior-result reuse/size omission, insufficient
+  context, invalid citations/output/tool calls, safe diagnostics, tampering,
+  independent notifications, and the database schedule prohibition.
+- [test_check_in_process.py](../tests/test_check_in_process.py) adds a real HTTP
+  server and separate forked RQ worker test. The worker uses the real model
+  adapter with a stub SDK client and asserts no tools were sent. A manual API
+  request completed through Redis/RQ and PostgreSQL with a validated result and
+  matching input identity. No notification or schedule was created.
+- Built the application image and started isolated API/worker/Redis/PostgreSQL
+  services. All seven migrations applied from an empty application database;
+  `alembic current` returned `0007 (head)`, `alembic check` found no new upgrade
+  operations, and `python -m pip check` found no broken requirements.
+- A separate synthetic HTTP request against these service containers exercised
+  the real adapter's missing-key failure through the real worker. Its safe
+  failure, input hash, empty tool audit, absent notification audit, and absent
+  schedules were verified. Service logs showed the expected missing-key task
+  failure and intentional schedule-constraint test rejection; services remained
+  healthy. Python syntax, local doc links, README shell syntax, and diff
+  whitespace checks passed.
+
+These checks used fresh project `pd-checkin-z2pknmii`, its own PostgreSQL/Redis
+volumes, no host ports, an internal network, blank provider credentials, and
+`RUN_OPENAI_INTEGRATION=0`. Compose was resolved without `.env` or inherited
+interpolation overrides. Test data stayed in that project's test database/Redis
+DB 1; the service smoke used its separate app database/Redis DB 0. All provider
+successes/sends were synthetic stubs; no paid model API or Pushover request was
+made. The normal project was not queried or modified. Disposable resources were
+removed after verification.
+
+Reproduction commands for the temporary derived manifest used in this run:
+
+```bash
+CHECK_IN_COMPOSE=/tmp/personal-dot-checkin-z2pknmii/compose.json
+CHECK_IN_PROJECT=pd-checkin-z2pknmii
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" build test
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" run --rm test
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" up -d --no-build --wait api worker
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" exec -T api alembic current
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" exec -T api alembic check
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" exec -T api python -m pip check
+docker compose -p "$CHECK_IN_PROJECT" -f "$CHECK_IN_COMPOSE" down --volumes
+```
+
+The manifest is temporary audit infrastructure, outside Git. Re-create the
+described isolation for future verification; do not replace it with the normal
+Compose project when running destructive test fixtures. The build resolved the
+existing dependency ranges afresh (including FastAPI 0.161.1, SQLAlchemy 2.0.55,
+Alembic 1.20.1, Pydantic 2.14.1, OpenAI SDK 2.54.0, RQ 2.12.0, and pytest 8.4.2).
+There is still no dependency lock or configured lint/type gate.
+
+Remaining boundaries: live model compatibility/quality and Pushover delivery are
+unverified; notification intent is not durable; approval-resume stale recovery,
+general attempt history, authentication, database least privilege, and backup
+restoration remain open. These changes do not enable recurring check-ins or
+deploy changes into the normal local stack. The next hardening milestone should
+address task ownership/diagnostics before expanding autonomous execution.
+
+## Historical implementation audit
+
+The remaining sections preserve the pre-check-in audit and its evidence. Claims
+about a missing check-in or a proposed next check-in milestone describe that
+earlier baseline; the current-status section above supersedes those claims.
+
 Audit date: 2026-10-23. Source baseline: `e982c54f6c28e4a548319d5ae5ed622e2bb7e578`.
 The working tree was clean at the start. This audit changes only this document;
 application behavior, dependencies, migrations, and existing tests are unchanged.

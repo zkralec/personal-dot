@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from personal_dot.check_in_schemas import CheckInRequest
+
 from personal_dot.models import (
     ApprovalStatus,
     MemoryType,
@@ -82,6 +84,9 @@ class TaskCreate(BaseModel):
         if self.type == TaskType.AGENT:
             validated = AgentTaskPayload.model_validate(self.payload)
             self.payload = validated.model_dump(mode="json", exclude_none=True)
+        elif self.type == TaskType.PROJECT_CHECK_IN:
+            check_in = CheckInRequest.model_validate(self.payload)
+            self.payload = check_in.model_dump(mode="json")
         return self
 
 
@@ -139,6 +144,8 @@ class ScheduleCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_schedule_configuration(self) -> "ScheduleCreate":
+        if self.task.type == TaskType.PROJECT_CHECK_IN:
+            raise ValueError("project check-ins are manual-only and cannot be scheduled")
         if self.schedule_type == ScheduleType.ONCE:
             if self.run_at is None:
                 raise ValueError("run_at is required for a one-time schedule")

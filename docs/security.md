@@ -70,7 +70,7 @@ bodies, or model output. Provider errors are sanitized before persistence.
 - Responses API requests use `store=false`; PostgreSQL remains authoritative.
 - Model output is untrusted data. It is persisted and returned as text, never
   evaluated, executed, or interpreted as authorization.
-- The model receives only two code-registered function definitions:
+- Generic agent tasks receive only two code-registered function definitions:
   `get_current_time` and `save_note`. It cannot supply a handler name, module,
   code, command, filesystem path, URL, or integration credential.
 - Function arguments are untrusted. They must be valid JSON objects, pass a
@@ -104,6 +104,25 @@ include the original instruction/context, model output items, and tool outputs.
 It is required to resume after approval, is never included in `TaskRead`, and is
 cleared on terminal completion or failure. Database access and backups must be
 treated as sensitive.
+
+## Manual Check-In Boundary
+
+Manual `project_check_in` tasks snapshot only the requested enabled project-note
+memories and supplied priorities. Input data and any relevant prior model result
+are untrusted JSON context. Inputs cannot register tools, load files, grant
+permission, execute recommendations, or cause memory writes. The check-in bypasses
+the tool runtime; unexpected provider function calls fail closed. Its model and
+result-validation errors use fixed safe diagnostics, without validation inputs or
+provider exception bodies in logs/results. This scoped protection does not fix
+all generic-task error-handling issues recorded in `STATUS.md`.
+
+Accepted task snapshots retain private note text after the source memory is
+edited, disabled, or deleted. Protect task APIs, database access, backups, and
+retention accordingly. Check-in metadata stores identity/hashes rather than a
+second copy of note content. Generated summaries and recommendations remain task
+results; no model inference is silently saved as a user preference. Explicit
+notification policies authorize only the existing status-only message; a
+recommendation-bearing push would require a separately reviewed content policy.
 
 ## Data and Error Handling
 

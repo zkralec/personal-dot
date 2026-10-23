@@ -27,6 +27,7 @@ class TaskType(str, enum.Enum):
     ECHO = "echo"
     FAIL = "fail"
     AGENT = "agent"
+    PROJECT_CHECK_IN = "project_check_in"
 
 
 class TaskStatus(str, enum.Enum):
@@ -158,6 +159,7 @@ memory_type_column = SQLAlchemyEnum(
 class Schedule(Base):
     __tablename__ = "schedules"
     __table_args__ = (
+        CheckConstraint("task_type IN ('echo', 'fail', 'agent')", name="ck_schedules_task_type"),
         CheckConstraint(
             "schedule_type IN ('once', 'interval', 'cron')",
             name="ck_schedules_type",
@@ -219,7 +221,7 @@ class Schedule(Base):
 class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
-        CheckConstraint("type IN ('echo', 'fail', 'agent')", name="ck_tasks_type"),
+        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in')", name="ck_tasks_type"),
         CheckConstraint(
             "status IN "
             "('queued', 'running', 'waiting_for_approval', 'succeeded', 'failed')",
