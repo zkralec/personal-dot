@@ -1,5 +1,51 @@
 # Personal Dot implementation baseline
 
+## Controlled live verification preflight — 2026-10-23
+
+**Blocked before submission; no model request, Pushover attempt, or task creation.**
+Read the development rules/status and inspected configuration without displaying
+secrets. This was a read-only check of the normal running stack, not a repeat of
+the prior synthetic test suite. No service, schema, task, memory or schedule was
+changed. No live credentials or private notes were copied into Git.
+
+Observed configuration and smallest required repairs:
+
+| Check | Evidence | Required continuation |
+| --- | --- | --- |
+| Model configuration | API and worker agree on `gpt-6-luna`, reasoning `low`, verbosity `medium`, output cap 4,096, SDK timeout 120 seconds, retries 2. `OPENAI_API_KEY` is present; validity was not tested. | Retain the existing model. Current check-in code caps output to 2,048, timeout to 60 seconds and SDK retries to zero. |
+| Pushover | `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are absent in `.env` and the running API/worker. `.env` permissions are `0600`. | Supply both secrets locally in ignored `.env`, then recreate application processes. No additional test push is authorized beyond the one controlled attempt. |
+| Selected personal inputs | No explicit check-in request/configured `project_id`, `note_ids`, or `priorities`; no stored check-in schedule. Only two generic-agent schedules exist, both disabled. Note content was not read or selected. | Operator must choose actual enabled `project_note` UUIDs and provide the project slug and priorities. Do not substitute README/evaluation fixtures or infer a selection. |
+| Test budget | No explicit live-test spend cap/configuration was supplied or found. The runtime output-token setting is not an approved total spend budget. | Operator must approve a concrete cap against the existing model/limits before submission. The runbook worksheet is an operator gate, not a new application-enforced USD budget. |
+| Running version | API's installed Alembic reports `0006 (head)`; worker module inspection finds neither `personal_dot.check_in` nor `personal_dot.notification_delivery`. Repository schema head is `0008`. | Back up the database, rebuild API/worker/scheduler/migration image and apply existing migrations in a quiet maintenance window. Healthy old containers alone do not establish check-in readiness. |
+| Availability/recurrence | API `/health` reports PostgreSQL/Redis OK. Compose API/worker/scheduler are healthy; API binds `127.0.0.1:8000`. Both stored schedules remain disabled. | Keep recurring execution disabled. No check-in schedule ID exists to enable yet; create a reviewed disabled schedule before using its returned ID. |
+
+Consequently the real check-in API/worker execution, live persisted result,
+source validity of a live recommendation, returned usage/provider metadata,
+Pushover acceptance and duplicate-observation checks **remain unverified**.
+No cost was measured or billed usage queried. A presence check is not credential
+validation, and there was no push for the operator to check on the phone.
+
+Updated the existing [operations guide](scheduled-check-ins.md#controlled-live-verification)
+with startup/health checks, private input/budget worksheets, upgrade/backup
+commands, a single-submission maintenance procedure using a one-job forked RQ
+worker with SDK retries disabled and the existing notification limit narrowed
+to one in that process, independent delivery inspection, failure stop rules,
+schedule controls and a blank 14-day usefulness/failures/actual-cost log. The
+normal scheduler must remain stopped during this procedure; a crash can leave
+a claim pending under its normal three-attempt policy. No permanent retry
+configuration or unrelated feature was added. These continuation commands have
+not been executed on personal data; phone arrival requires the operator's
+manual check even if a future provider response says `sent`.
+
+Documentation verification: 37 shell blocks passed `bash -n`; 10 embedded
+Python snippets parsed; documentation file links and Git whitespace checks
+passed. Read-only inspection confirmed installed RQ supports `burst`, `max_jobs`
+and `with_scheduler` controls plus queue inspection. The maintenance procedure
+and its process-local delivery override were not exercised end to end here.
+No migrations or application tests were run against the normal personal database.
+The earlier isolated **133 passed, 1 skipped** evidence below remains a synthetic
+baseline, not evidence of this requested live verification.
+
 ## Persistent project check-in scheduling — 2026-10-23
 
 Implemented from clean baseline `bed1abe`, reusing the existing dedicated

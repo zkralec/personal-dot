@@ -207,8 +207,8 @@ budget. This uses ordinary task queries, with no semantic memory.
 The worker calls the existing model adapter with tools disabled, at most 2,048
 output tokens, a 60-second SDK timeout, and no SDK retries. Smaller configured
 limits still apply; the existing RQ job timeout bounds the whole job.
-Transport/recovery remains at least once: a
-worker crash can cause a later request for the same task. The result must be
+Queue delivery remains at least once. Interrupted check-in execution becomes
+terminal `uncertain` without automatic model retry. The result must be
 valid JSON with:
 
 - `schema_version: 1`, a short `summary`, `blockers`, and `uncertainty`;
@@ -244,6 +244,11 @@ live recurrence. The [scheduled check-in guide](docs/scheduled-check-ins.md)
 defines occurrence identity, downtime coalescing, timezone/DST behavior, overlap
 prevention, notification retry limits, and exact inspect/enable/pause/disable
 commands.
+
+For a controlled live check with one model request and one push attempt, follow
+the [operations procedure](docs/scheduled-check-ins.md#controlled-live-verification).
+It requires explicitly selected personal notes, credentials and an approved
+budget; normal notification retries must remain stopped during the test.
 
 ## Configure Pushover
 
