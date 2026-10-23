@@ -213,6 +213,7 @@ class AgentService:
             metadata.update(
                 {
                     "success": False,
+                    "request_outcome": "unknown",
                     "model_completed_at": datetime.now(UTC).isoformat(),
                 }
             )
@@ -221,6 +222,7 @@ class AgentService:
             metadata.update(
                 {
                     "success": False,
+                    "request_outcome": "unknown",
                     "model_completed_at": datetime.now(UTC).isoformat(),
                 }
             )

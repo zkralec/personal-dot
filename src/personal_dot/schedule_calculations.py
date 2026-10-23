@@ -16,9 +16,19 @@ def next_cron_occurrence(
     expression: str, timezone_name: str, after: datetime
 ) -> datetime:
     timezone = ZoneInfo(timezone_name)
-    local_after = as_utc(after).astimezone(timezone)
-    next_local = croniter(expression, local_after).get_next(datetime)
-    return as_utc(next_local)
+    after_utc = as_utc(after)
+    # Calculate wall times explicitly: skip nonexistent times and choose only
+    # the first instance of an ambiguous time. croniter's aware arithmetic can
+    # otherwise shift a spring occurrence or repeat a fall occurrence.
+    wall_after = after_utc.astimezone(timezone).replace(tzinfo=None)
+    iterator = croniter(expression, wall_after)
+    while True:
+        wall = iterator.get_next(datetime)
+        candidate = wall.replace(tzinfo=timezone, fold=0).astimezone(UTC)
+        if candidate.astimezone(timezone).replace(tzinfo=None) != wall:
+            continue
+        if candidate > after_utc:
+            return candidate
 
 
 def next_occurrence(schedule: Schedule, occurrence: datetime) -> datetime | None:

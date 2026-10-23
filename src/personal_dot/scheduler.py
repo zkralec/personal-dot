@@ -10,8 +10,10 @@ from sqlalchemy import or_, select
 
 from personal_dot.config import Settings, get_settings
 from personal_dot.db import SessionLocal
-from personal_dot.models import Schedule, Task, TaskStatus
-from personal_dot.schedule_calculations import as_utc, next_occurrence
+from personal_dot.check_in import prepare_check_in
+from personal_dot.models import Schedule, Task, TaskStatus, TaskType
+from personal_dot.notification_delivery import ensure_notification, deliver_pending_notifications
+from personal_dot.schedule_calculations import as_utc, next_occurrence, next_occurrence_after
 from personal_dot.structured_logging import configure_logging
 from personal_dot.task_dispatch import enqueue_task
 
@@ -24,6 +26,7 @@ class SchedulerStats:
     tasks_enqueued: int = 0
     tasks_recovered: int = 0
     errors: int = 0
+    notifications_attempted: int = 0
 
 
 class SchedulerService:
@@ -59,7 +62,7 @@ class SchedulerService:
                 except Exception as exc:
                     stats.errors += 1
                     self._record_schedule_error(schedule_id, exc)
-                    logger.exception(
+                    logger.error(
                         "Schedule materialization failed",
                         extra={
                             "event": "schedule_failed",
@@ -85,6 +88,7 @@ class SchedulerService:
         enqueued, enqueue_errors = self._dispatch_pending_tasks(current)
         stats.tasks_enqueued += enqueued
         stats.errors += enqueue_errors
+        stats.notifications_attempted = deliver_pending_notifications(current, self.settings.scheduler_batch_size)
         return stats
 
     def _due_schedule_ids(self, now: datetime) -> list[uuid.UUID]:
@@ -127,19 +131,40 @@ class SchedulerService:
             )
             created = task is None
             if task is None:
+                payload = dict(schedule.payload)
+                input_failed = False
+                if schedule.task_type == TaskType.PROJECT_CHECK_IN:
+                    try:
+                        payload = prepare_check_in(payload, session)
+                    except Exception:
+                        # An invalid selection is an auditable failed occurrence,
+                        # never a repeated attempt or a provider request.
+                        input_failed = True
                 task = Task(
                     type=schedule.task_type,
-                    status=TaskStatus.QUEUED,
-                    payload=dict(schedule.payload),
+                    status=TaskStatus.FAILED if input_failed else TaskStatus.QUEUED,
+                    payload=payload,
                     notification_policy=schedule.notification_policy,
                     schedule_id=schedule.id,
                     scheduled_for=occurrence,
                 )
                 session.add(task)
                 session.flush()
+                if input_failed:
+                    task.completed_at = now
+                    task.error = "Project check-in scheduled inputs could not be prepared"
+                    task.execution_metadata = {"handler": "project_check_in", "success": False, "execution_outcome": "invalid_inputs"}
+                    ensure_notification(session, task, now)
 
             schedule.last_run_at = occurrence
-            schedule.next_run_at = next_occurrence(schedule, occurrence)
+            if schedule.task_type == TaskType.PROJECT_CHECK_IN:
+                schedule.next_run_at = next_occurrence_after(schedule, now) if schedule.schedule_type.value != "once" else None
+                task.execution_metadata = {**(task.execution_metadata or {}), "schedule": {
+                    "missed_policy": "coalesce", "coalesced_through": now.isoformat(),
+                    "scheduled_for": occurrence.isoformat(),
+                }}
+            else:
+                schedule.next_run_at = next_occurrence(schedule, occurrence)
             schedule.last_error = None
             if schedule.next_run_at is None:
                 schedule.enabled = False
@@ -148,7 +173,7 @@ class SchedulerService:
     def _record_schedule_error(
         self, schedule_id: uuid.UUID, error: Exception
     ) -> None:
-        safe_error = f"{type(error).__name__}: {error}"[:2000]
+        safe_error = "Schedule materialization failed"
         with self.session_factory() as session, session.begin():
             schedule = session.get(Schedule, schedule_id)
             if schedule is not None:
@@ -183,6 +208,20 @@ class SchedulerService:
                     .with_for_update(skip_locked=True)
                 )
                 if task is None:
+                    continue
+                if task.type == TaskType.PROJECT_CHECK_IN:
+                    task.status = TaskStatus.UNCERTAIN
+                    task.completed_at = now
+                    task.error = "Project check-in interrupted; model request outcome unknown; automatic execution retry disabled"
+                    task.execution_metadata = {**(task.execution_metadata or {}),
+                        "success": None, "execution_outcome": "unknown",
+                        "interrupted_at": now.isoformat()}
+                    ensure_notification(session, task, now)
+                    recovered += 1
+                    logger.warning("Check-in execution outcome unknown", extra={
+                        "event": "check_in_interrupted", "task_id": str(task.id),
+                        "schedule_id": str(task.schedule_id),
+                    })
                     continue
                 task.status = TaskStatus.QUEUED
                 task.started_at = None
@@ -296,6 +335,7 @@ def main() -> None:
                     stats.tasks_enqueued,
                     stats.tasks_recovered,
                     stats.errors,
+                    stats.notifications_attempted,
                 )
             ):
                 logger.info(
@@ -306,6 +346,7 @@ def main() -> None:
                         "tasks_enqueued": stats.tasks_enqueued,
                         "tasks_recovered": stats.tasks_recovered,
                         "errors": stats.errors,
+                        "notifications_attempted": stats.notifications_attempted,
                     },
                 )
         except Exception:

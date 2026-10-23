@@ -338,13 +338,14 @@ async def test_opt_in_notification_is_after_commit_and_cannot_change_result(clie
 
 
 @pytest.mark.anyio
-async def test_check_in_cannot_be_scheduled(client, provider):
+async def test_check_in_schedule_defaults_disabled(client, provider):
     note = await create_note(client)
     response = await client.post("/schedules", json={
         "name": "not enabled", "schedule_type": "interval", "interval_seconds": 60,
         "task": request_for(note),
     })
-    assert response.status_code == 422
+    assert response.status_code == 201
+    assert response.json()["enabled"] is False
     assert not provider.requests
 
 
@@ -387,20 +388,8 @@ async def test_preparation_failure_does_not_expose_private_input(client, provide
     assert not provider.requests
 
 
-def test_database_also_prohibits_scheduled_check_ins():
-    from sqlalchemy.exc import IntegrityError
-    from personal_dot.models import Schedule, ScheduleType
-    with SessionLocal() as db:
-        db.add(Schedule(
-            name="synthetic forbidden schedule", schedule_type=ScheduleType.INTERVAL,
-            task_type=TaskType.PROJECT_CHECK_IN, payload={}, interval_seconds=60,
-        ))
-        with pytest.raises(IntegrityError):
-            db.commit()
-
-
 @pytest.mark.anyio
-async def test_stale_check_in_recovery_preserves_snapshot_and_restarts_clock(client, provider):
+async def test_stale_check_in_is_uncertain_without_model_retry(client, provider):
     from datetime import timedelta
     from personal_dot.scheduler import SchedulerService
 
@@ -415,26 +404,11 @@ async def test_stale_check_in_recovery_preserves_snapshot_and_restarts_clock(cli
         stored.execution_metadata = {"previous_attempt": "synthetic"}
         db.commit()
     await client.delete("/memories/" + note["id"])
-    scheduler = SchedulerService()
-    assert scheduler._recover_stale_tasks(now) == 1
-    with SessionLocal() as db:
-        stored = db.get(Task, task_id)
-        assert stored.payload == task["payload"]
-        assert stored.started_at is None
-        assert stored.execution_metadata["recovered_from_stale_run"] is True
-
-    original_create = provider.create
-    def inspect_active_attempt(**request):
-        with SessionLocal() as db:
-            stored = db.get(Task, task_id)
-            assert stored.status == TaskStatus.RUNNING
-            assert stored.started_at >= now
-        assert scheduler._recover_stale_tasks(datetime.now(UTC)) == 0
-        return original_create(**request)
-    provider.create = inspect_active_attempt
+    assert SchedulerService()._recover_stale_tasks(now) == 1
     run_queued_jobs()
     completed = (await client.get("/tasks/" + task["id"])).json()
-    assert completed["status"] == "succeeded"
+    assert completed["status"] == "uncertain"
     assert completed["payload"] == task["payload"]
-    assert completed["execution_metadata"]["check_in"]["input_sha256"] == task["payload"]["input_sha256"]
-    assert len(provider.requests) == 1
+    assert completed["execution_metadata"]["previous_attempt"] == "synthetic"
+    assert completed["execution_metadata"]["execution_outcome"] == "unknown"
+    assert not provider.requests

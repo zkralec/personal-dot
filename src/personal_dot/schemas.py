@@ -145,7 +145,10 @@ class ScheduleCreate(BaseModel):
     @model_validator(mode="after")
     def validate_schedule_configuration(self) -> "ScheduleCreate":
         if self.task.type == TaskType.PROJECT_CHECK_IN:
-            raise ValueError("project check-ins are manual-only and cannot be scheduled")
+            if "enabled" not in self.model_fields_set:
+                self.enabled = False
+            if self.enabled:
+                raise ValueError("create check-in schedules disabled, then explicitly enable them")
         if self.schedule_type == ScheduleType.ONCE:
             if self.run_at is None:
                 raise ValueError("run_at is required for a one-time schedule")

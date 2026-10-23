@@ -234,9 +234,16 @@ Notifications default to `none`. An explicit `on_completion` policy opts in to
 the existing status-only Pushover notification after the result commits; provider
 failure is audited without changing the result or terminal status. A successful
 insufficient-information result also counts as task completion. Notifications do
-not include the recommendation or note text and remain best effort, with no
-delivery retry/outbox. Check-ins cannot be created through `/schedules`, and the
-database also rejects check-in schedules. Recurring execution remains disabled.
+not include the recommendation or note text. Check-ins now persist notification
+intent with the terminal result and retry delivery independently, up to three
+attempts. Interrupted requests become `uncertain` without automatic model retry.
+
+Check-ins can use the existing persistent scheduler. Creation defaults to
+disabled and a separate operator enable is required; this milestone enables no
+live recurrence. The [scheduled check-in guide](docs/scheduled-check-ins.md)
+defines occurrence identity, downtime coalescing, timezone/DST behavior, overlap
+prevention, notification retry limits, and exact inspect/enable/pause/disable
+commands.
 
 ## Configure Pushover
 
@@ -288,9 +295,10 @@ curl --fail --request PATCH http://127.0.0.1:8000/schedules/SCHEDULE_ID \
   --data '{"enabled":false}'
 ```
 
-The scheduler catches up missed recurring occurrences after downtime in bounded
-batches. See `docs/architecture.md` for duplicate prevention, recovery, and
-exactly-once limitations.
+The scheduler catches up missed generic recurring occurrences in bounded
+batches. Project check-ins coalesce downtime into one occurrence. See
+[scheduled check-ins](docs/scheduled-check-ins.md) and `docs/architecture.md` for
+duplicate prevention, recovery, and delivery limitations.
 
 ## Test
 

@@ -60,7 +60,7 @@ src/personal_dot/
   config.py              environment-backed settings
   agent_service.py       isolated OpenAI Responses API adapter
   agent_runtime.py       validated tool-call, audit, pause, and resume lifecycle
-  check_in.py            bounded manual input snapshots and tool-free generation
+  check_in.py            bounded input snapshots and tool-free generation
   check_in_schemas.py    check-in request, snapshot, and validated result contracts
   db.py                  SQLAlchemy engine/session/base
   jobs.py                worker entry points and state transitions
@@ -70,6 +70,7 @@ src/personal_dot/
   models.py              persistent task model and enums
   notification_routes.py explicit test-notification endpoint
   notification_service.py provider interface, Pushover adapter, and policy
+  notification_delivery.py durable bounded check-in notification retries
   queue.py               Redis/RQ construction
   schedule_calculations.py UTC interval and timezone-aware cron calculations
   schedule_routes.py     schedule API and execution-history reads
@@ -94,7 +95,7 @@ queued -> running -> succeeded
 ```
 
 Timestamps use timezone-aware UTC values. Payload and result are JSON objects.
-The API supports `echo`, an intentional `fail` handler, `agent`, and manual
+The API supports `echo`, an intentional `fail` handler, `agent`, and
 `project_check_in` tasks. Agent tasks
 require an instruction and accept optional textual context. Model output is
 stored as untrusted text and is never executed.
@@ -179,10 +180,15 @@ provenance; they do not establish semantic truth. Generated results are never
 promoted to persistent memories.
 
 Existing task/result commits and notification isolation are reused. Notification
-policy remains explicit and defaults to none; opt-in notifications remain
-status-only and best effort. Migration `0007` permits the new task type and adds
-a schedule constraint excluding it. Both API validation and the worker enforce
-manual-only check-ins; no recurring execution is enabled.
+policy remains explicit and defaults to none. Migration `0008` supersedes the
+manual-only restriction from `0007`, permitting disabled check-in schedules and
+adding durable status-only notification intent. The existing dedicated scheduler
+snapshots current selected inputs at materialization. Check-ins coalesce overdue
+occurrences, skip competing project executions using a PostgreSQL advisory lock,
+and become terminal `uncertain` on stale recovery or transport interruption;
+they never automatically repeat model execution. See
+[scheduled check-ins](scheduled-check-ins.md) for policies and operator commands.
+No live recurring execution is enabled by this milestone.
 
 ## Tool and Permission Execution
 
@@ -255,13 +261,18 @@ service factory; task execution and policy logic remain unchanged. The
 explicit `POST /notifications/test` endpoint sends a fixed, non-sensitive test
 message and does not accept caller-controlled message text.
 
-Notification delivery is deliberately best effort. Provider failures are
+For non-check-in tasks, notification delivery remains best effort. Provider failures are
 logged and audited without changing a successful task to failed or replacing a
 task's original failure. There is no notification retry/outbox yet: a worker
 crash after the task commit but before the provider call can omit a
 notification, and a crash after provider acceptance but before audit commit can
-leave its delivery unaudited. A Pushover `sent` audit means its API accepted the
-message, not that a device displayed it.
+leave its delivery unaudited. For check-ins, terminal state and a unique
+`notification_deliveries` intent commit atomically. The worker sends after commit;
+the dedicated scheduler independently retries with three total claims, 60/300
+second failure delays, a 120-second claim lease, and an auditable unknown outcome
+after interrupted claims. Delivery cannot rerun model work. A crash after send
+but before audit may duplicate a push. A Pushover `sent` audit means its API
+accepted the message, not that a device displayed it.
 
 ## Persistent Scheduling
 
@@ -274,7 +285,8 @@ A `Schedule` contains its task type and payload plus one timing form:
 `next_run_at`, `last_run_at`, and task occurrence times are stored as
 timezone-aware PostgreSQL values and normalized to UTC. Cron is evaluated in
 the named timezone, so daylight-saving transitions follow that timezone's
-rules. API timestamps without an offset are rejected.
+rules. Nonexistent wall times are skipped; ambiguous times run once at fold 0.
+API timestamps without an offset are rejected.
 
 For every poll, the scheduler:
 
@@ -288,8 +300,11 @@ For every poll, the scheduler:
 The database constraint `UNIQUE (schedule_id, scheduled_for)` permits only one
 task record for an occurrence. Row locks prevent overlapping scheduler
 processes from advancing the same row concurrently. Downtime backlog is caught
-up chronologically, limited by `SCHEDULER_MAX_CATCH_UP` per schedule per poll;
-later polls continue draining remaining occurrences.
+up chronologically for generic tasks, limited by `SCHEDULER_MAX_CATCH_UP` per
+schedule per poll; later polls continue draining remaining occurrences.
+Check-ins coalesce all currently due occurrences into the earliest pending
+identity and advance directly to the next future occurrence, recording the
+covered window in task metadata.
 
 Disabling stops materialization but preserves the schedule. Re-enabling an
 overdue recurring schedule resumes at its next future occurrence, intentionally
@@ -306,7 +321,9 @@ record an enqueue attempt before delivery. The scheduler retries RQ delivery
 for every task still recorded as `queued`; a crash between database commit and
 enqueue, or loss of Redis data, therefore does not silently lose it. Any task
 left `running` beyond the effective stale threshold is returned to `queued` and
-redelivered.
+redelivered, except check-ins: they become terminal `uncertain`, retain their
+snapshot and metadata, and reject late writes. Check-in model execution has no
+automatic retry; its notification intent is handled independently.
 
 The system guarantees at most one PostgreSQL task record per schedule
 occurrence. It does **not** guarantee exactly-once handler or model execution.

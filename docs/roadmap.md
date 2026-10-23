@@ -67,16 +67,24 @@ listed below.
 - Deterministic reuse of relevant successful task results without semantic memory.
 - Model tools disabled; validated sourced recommendations or insufficient context.
 - Results remain task results; optional status notifications remain independent.
-- API and database reject check-in schedules; recurring execution stays disabled.
+- Initially manual-only; V1.7 adds disabled-by-default persistent schedules.
 - Synthetic provider tests cover the manual API/queue/worker workflow and errors.
+
+## V1.7: Scheduled Project Check-In
+
+- Reuse the dedicated scheduler and PostgreSQL occurrence uniqueness.
+- Explicit enable, downtime coalescing, timezone/DST policy, and project locks.
+- Terminal uncertain outcomes without automatic check-in model retries.
+- Atomic check-in notification intent and three bounded independent attempts.
+- Isolated concurrency, downtime, DST, notification, and process lifecycle tests.
+- No live recurring schedule enabled. See [operator guide](scheduled-check-ins.md).
 
 ## Next: Harden the Core
 
 - Add durable task-attempt/audit-event records.
 - Add general task retry policy, timeouts, and cancellation semantics.
 - Extend the scheduled-task reconciler or use an outbox for direct tasks.
-- Add a durable notification outbox/retry policy if missed pushes prove
-  operationally important.
+- Consider extending the check-in notification outbox to generic tasks.
 - Add authentication before exposing the API beyond loopback.
 
 ## Future Capabilities

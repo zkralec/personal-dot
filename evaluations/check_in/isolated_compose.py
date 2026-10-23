@@ -12,6 +12,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--stub-check-in-providers", action="store_true",
+                        help="use synthetic model/notification providers in the isolated worker and scheduler")
     args = parser.parse_args()
     if not re.fullmatch(r"pd-eval-[a-z0-9-]+", args.project):
         parser.error("use a fresh project name starting with pd-eval-")
@@ -40,6 +42,15 @@ def main() -> None:
                 settings[key] = ""
         settings["RUN_OPENAI_INTEGRATION"] = "0"
         settings["RUN_CHECK_IN_LIVE_EVAL"] = "0"
+    if args.stub_check_in_providers:
+        for name in ("api", "worker", "scheduler"):
+            manifest["services"][name]["environment"]["SYNTHETIC_CHECK_IN_PROVIDERS"] = "1"
+        manifest["services"]["worker"]["command"] = ["python", "-c",
+            "from tests.test_check_in_process import NOTIFICATION_BOOTSTRAP, WORKER_BOOTSTRAP; "
+            "exec(NOTIFICATION_BOOTSTRAP + WORKER_BOOTSTRAP)"]
+        manifest["services"]["scheduler"]["command"] = ["python", "-c",
+            "from tests.test_check_in_process import NOTIFICATION_BOOTSTRAP; "
+            "exec(NOTIFICATION_BOOTSTRAP); from personal_dot.scheduler import main; main()"]
     with args.output.open("x") as output:
         json.dump(manifest, output, indent=2)
         output.write("\n")

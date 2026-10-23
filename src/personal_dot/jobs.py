@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from personal_dot.agent_runtime import AgentPaused, get_agent_runtime
 from personal_dot.agent_service import AgentExecutionError
 from personal_dot.check_in import execute_check_in
 from personal_dot.config import get_settings
-from personal_dot.db import SessionLocal
+from personal_dot.db import SessionLocal, engine
 from personal_dot.memory_service import get_memory_service
 from personal_dot.models import Task, TaskStatus, TaskType
 from personal_dot.notification_service import (
@@ -20,6 +20,7 @@ from personal_dot.notification_service import (
     should_notify,
 )
 from personal_dot.schemas import AgentTaskPayload
+from personal_dot.notification_delivery import ensure_notification, deliver_notification
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,9 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
     with SessionLocal() as session:
         task = session.get(Task, task_id)
         if task is None or not should_notify(task.notification_policy, task.status):
+            return
+        if task.type == TaskType.PROJECT_CHECK_IN:
+            deliver_notification(task_id, service_factory=get_notification_service)
             return
         notification = TaskNotification(
             task_id=task.id,
@@ -156,6 +160,40 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
 def execute_task(task_id: str) -> dict[str, Any]:
     parsed_id = uuid.UUID(task_id)
     with SessionLocal() as session:
+        task = session.get(Task, parsed_id)
+        is_check_in = task is not None and task.type == TaskType.PROJECT_CHECK_IN
+        if is_check_in:
+            if task.status != TaskStatus.QUEUED:
+                return task.result or {}
+            project_id = task.payload.get("project_id", "")
+    if not is_check_in:
+        return _execute_task(task_id)
+
+    # A transaction advisory lock spans the entire handler, across task commits.
+    # Hash collisions can only conservatively skip work, never permit overlap.
+    with engine.connect() as connection, connection.begin():
+        acquired = connection.scalar(text(
+            "SELECT pg_try_advisory_xact_lock(hashtextextended(:project, 741923))"
+        ), {"project": project_id})
+        if acquired:
+            return _execute_task(task_id)
+        with SessionLocal() as session, session.begin():
+            task = session.scalar(select(Task).where(Task.id == parsed_id).with_for_update())
+            assert task is not None
+            if task.status == TaskStatus.QUEUED:
+                task.status = TaskStatus.FAILED
+                task.completed_at = datetime.now(UTC)
+                task.error = "Project check-in skipped: another execution holds the project lock"
+                task.execution_metadata = {**(task.execution_metadata or {}),
+                    "handler": "project_check_in", "success": False,
+                    "execution_outcome": "skipped_overlap"}
+                ensure_notification(session, task, task.completed_at)
+        return {}
+
+
+def _execute_task(task_id: str) -> dict[str, Any]:
+    parsed_id = uuid.UUID(task_id)
+    with SessionLocal() as session:
         task = session.scalar(
             select(Task).where(Task.id == parsed_id).with_for_update()
         )
@@ -178,7 +216,8 @@ def execute_task(task_id: str) -> dict[str, Any]:
         task.result = None
         task.error = None
         if task.agent_state is None:
-            task.execution_metadata = {"handler": task.type.value, "success": None}
+            task.execution_metadata = {**task.execution_metadata, "handler": task.type.value, "success": None}
+        schedule_metadata = {"schedule": task.execution_metadata["schedule"]} if "schedule" in task.execution_metadata else {}
         session.commit()
         logger.info(
             "Task execution started",
@@ -194,6 +233,8 @@ def execute_task(task_id: str) -> dict[str, Any]:
             )
             if task is None:
                 raise LookupError(f"task {task_id} does not exist") from exc
+            if task.type == TaskType.PROJECT_CHECK_IN and task.status != TaskStatus.RUNNING:
+                return task.result or {}
             task.status = TaskStatus.FAILED
             task.completed_at = datetime.now(UTC)
             task.result = None
@@ -206,6 +247,12 @@ def execute_task(task_id: str) -> dict[str, Any]:
                     "handler": task.type.value,
                     "success": False,
                 }
+            task.execution_metadata = {**schedule_metadata, **task.execution_metadata}
+            if task.type == TaskType.PROJECT_CHECK_IN and task.execution_metadata.get("request_outcome") == "unknown":
+                task.status = TaskStatus.UNCERTAIN
+                task.error = "Project check-in request interrupted; provider outcome unknown; automatic execution retry disabled"
+                task.execution_metadata["execution_outcome"] = "unknown"
+            ensure_notification(session, task, task.completed_at)
             session.commit()
             log_metadata = task.execution_metadata
         _notify_terminal_task(parsed_id)
@@ -245,11 +292,14 @@ def execute_task(task_id: str) -> dict[str, Any]:
         )
         if task is None:
             raise LookupError(f"task {task_id} does not exist")
+        if task.type == TaskType.PROJECT_CHECK_IN and task.status != TaskStatus.RUNNING:
+            return task.result or {}
         task.status = TaskStatus.SUCCEEDED
         task.result = result.result
-        task.execution_metadata = result.metadata
+        task.execution_metadata = {**schedule_metadata, **result.metadata}
         task.agent_state = None
         task.completed_at = datetime.now(UTC)
+        ensure_notification(session, task, task.completed_at)
         session.commit()
     _notify_terminal_task(parsed_id)
     logger.info(

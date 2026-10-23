@@ -57,7 +57,9 @@ external systems; only an explicitly configured status notification may follow
 a terminal task state.
 
 Pushover notifications are an explicitly configured external side effect. A
-non-`none` task policy authorizes one concise status notification for that task;
+non-`none` task policy authorizes one concise status notification for that task
+(for check-ins, up to three delivery attempts, with possible duplicate pushes
+after uncertain acceptance);
 calling `POST /notifications/test` explicitly authorizes one fixed test push.
 Notifications never include task payloads, errors, prompts, context, result
 bodies, or model output. Provider errors are sanitized before persistence.

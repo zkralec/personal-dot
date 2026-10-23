@@ -40,6 +40,7 @@ class JsonFormatter(logging.Formatter):
             "tasks_created",
             "tasks_enqueued",
             "tasks_recovered",
+            "notifications_attempted",
             "errors",
             "provider",
             "provider_request_id",

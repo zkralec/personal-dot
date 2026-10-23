@@ -143,7 +143,7 @@ class NotificationService:
         status_label = (
             "completed successfully"
             if notification.status == TaskStatus.SUCCEEDED
-            else "failed"
+            else "has an uncertain execution outcome" if notification.status == TaskStatus.UNCERTAIN else "failed"
         )
         message = NotificationMessage(
             title=f"Personal Dot task {notification.status.value}",
@@ -165,11 +165,11 @@ class NotificationService:
 
 def should_notify(policy: NotificationPolicy, status: TaskStatus) -> bool:
     if policy == NotificationPolicy.ALWAYS:
-        return status in {TaskStatus.SUCCEEDED, TaskStatus.FAILED}
+        return status in {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.UNCERTAIN}
     if policy == NotificationPolicy.ON_COMPLETION:
         return status == TaskStatus.SUCCEEDED
     if policy == NotificationPolicy.ON_FAILURE:
-        return status == TaskStatus.FAILED
+        return status in {TaskStatus.FAILED, TaskStatus.UNCERTAIN}
     return False
 
 

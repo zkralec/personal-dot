@@ -43,6 +43,7 @@ def clean_state() -> None:
     from personal_dot.models import (
         ApprovalRequest,
         Memory,
+        NotificationDelivery,
         Note,
         Schedule,
         Task,
@@ -55,6 +56,7 @@ def clean_state() -> None:
         db.query(ApprovalRequest).delete()
         db.query(Note).delete()
         db.query(ToolCall).delete()
+        db.query(NotificationDelivery).delete()
         db.query(Task).delete()
         db.query(Schedule).delete()
         db.query(Memory).delete()

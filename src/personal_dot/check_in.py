@@ -16,12 +16,14 @@ from personal_dot.check_in_schemas import (
 )
 from personal_dot.config import get_settings
 from personal_dot.models import Memory, MemoryType, Task, TaskStatus, TaskType
+from rq.timeouts import JobTimeoutException
 
 MAX_INPUT_CHARACTERS = 24_000
 MAX_RESULT_CHARACTERS = 8_000
 MODEL_METADATA_KEYS = frozenset({
     "provider", "model", "reasoning_effort", "output_verbosity", "model_started_at",
     "model_completed_at", "response_id", "request_id", "response_status", "usage",
+    "request_outcome",
 })
 
 
@@ -155,8 +157,6 @@ def _validate_sources(result: CheckInResult, prepared: PreparedCheckIn) -> None:
 def execute_check_in(task: Task, *, service: AgentService | None = None) -> CheckInExecution:
     metadata: dict[str, Any] = {"handler": "project_check_in", "success": False}
     try:
-        if task.schedule_id is not None:
-            raise ValueError("manual task required")
         prepared = PreparedCheckIn.model_validate(task.payload)
         context = render_context(prepared)
         if len(context) > MAX_INPUT_CHARACTERS or _sha256(context) != prepared.input_sha256:
@@ -185,6 +185,9 @@ def execute_check_in(task: Task, *, service: AgentService | None = None) -> Chec
     instruction = build_check_in_instruction()
     try:
         response = (service or get_check_in_service()).execute(instruction=instruction, context=context)
+    except (TimeoutError, JobTimeoutException):
+        metadata["request_outcome"] = "unknown"
+        raise AgentExecutionError("Project check-in model request failed", metadata) from None
     except AgentExecutionError as exc:
         metadata.update({
             key: value for key, value in exc.metadata.items() if key in MODEL_METADATA_KEYS

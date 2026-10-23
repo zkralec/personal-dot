@@ -1,5 +1,124 @@
 # Personal Dot implementation baseline
 
+## Persistent project check-in scheduling — 2026-10-23
+
+Implemented from clean baseline `bed1abe`, reusing the existing dedicated
+scheduler, schedule API, PostgreSQL occurrence key, task worker, check-in
+contracts, and notification interface. No dependency or additional process was
+added. [Migration 0008](../alembic/versions/0008_schedule_check_ins.py) permits
+check-in schedules, adds terminal `uncertain`, and creates durable check-in
+notification delivery intent. Applied migrations were not edited.
+
+**No live recurring schedule was created or enabled. Real user data and the
+normal stack were not accessed or changed.** Only synthetic schedules in the
+isolated verification project were enabled; its container smoke schedule was
+paused immediately after its one successful occurrence.
+
+Implemented policies:
+
+- Check-in schedules default to disabled and reject enabled creation. A separate
+  operator PATCH enables them after current note selection is validated.
+  Materialization snapshots current selected notes with the existing input
+  bounds, hashes, provenance, prior-result selection and no-tools contract.
+  Invalid later inputs create safe failed occurrences without model work.
+- PostgreSQL owns `(schedule_id, scheduled_for)` uniqueness and schedule
+  advancement in one row-locked transaction. Concurrent scheduler polls and
+  duplicate queue deliveries cannot create a second task for that occurrence.
+- Enabled downtime coalesces all due check-ins into one task keyed by the
+  earliest pending timestamp, recording the covered window, then advances to
+  the next future occurrence. Disabled recurring windows are skipped on enable.
+  Generic schedules keep their existing bounded chronological catch-up policy.
+- Configured IANA cron timezones include `America/New_York`. Spring gaps skip
+  nonexistent wall times; fall folds run only the first occurrence. Interval
+  schedules retain UTC elapsed-time anchoring.
+- Manual and scheduled check-ins share a PostgreSQL project advisory lock.
+  Competing executions fail promptly with `skipped_overlap`, without a model
+  request or retry. Each task permits one model request, zero SDK retries,
+  at most 2,048 output tokens, a maximum 60-second SDK timeout and the existing
+  RQ timeout. Queued delivery recovery retains task identity and snapshot.
+- Stale running work, transport interruptions and RQ timeouts during generation
+  become terminal `uncertain`; automatic model retry is disabled. Late worker
+  completion cannot overwrite that state. Future occurrences remain eligible
+  after lock release; uncertainty does not automatically pause recurrence.
+  This bounds local execution, without claiming remote provider work stopped.
+- Terminal result and unique notification intent commit atomically for check-ins.
+  Delivery retries independently in the existing scheduler, with three total
+  claims, 60/300-second failure delays, a 120-second claim lease and fenced
+  updates. Interrupted claims retain an unknown outcome. Exhaustion is visible
+  in task notification metadata and never reruns or changes completed model
+  work. Notifications remain status-only; uncertain outcomes are described
+  explicitly. Historical completed tasks are not backfilled.
+- SQLAlchemy hides bound parameters, and schedule materialization errors use
+  fixed diagnostics. This is a limited reduction in diagnostic disclosure, not
+  resolution of all generic error/logging findings below.
+
+Exact deployment and **inspect, enable, pause and disable commands**, plus the
+full duplicate/downtime/DST/notification policies and isolated reproduction,
+are in [the scheduled check-in guide](scheduled-check-ins.md).
+
+### Verification evidence
+
+- Full final-code isolated suite: **133 passed, 1 skipped**, 134 collected,
+  in 19.84 seconds.
+  The skipped test is the explicitly gated paid OpenAI integration test. No
+  real model generation or external notification occurred.
+- The [scheduling regressions](../tests/test_scheduled_check_in.py) cover
+  disabled creation, enable/pause, disabled gaps, simultaneous schedulers,
+  database uniqueness rejection, 100-day downtime coalescing, current snapshots,
+  deleted inputs, queue loss/recovery, New York spring/fall boundaries,
+  concurrent project execution, late completion fencing, future execution after
+  uncertainty, SDK/RQ timeouts, notification backoff/exhaustion, expired final
+  claims, independent retries and simultaneous delivery claims.
+- The [process test](../tests/test_check_in_process.py) runs actual HTTP,
+  independent scheduler and forked RQ processes with synthetic SDK/push providers.
+  The [container smoke harness](../tests/scheduled_lifecycle_smoke.py) additionally
+  exercised actual API/worker/scheduler services: task
+  `47369bd7-d61e-4c56-bf47-14978570c2c2` succeeded with one synthetic model call;
+  its initial push failed, scheduler retry succeeded, and delivery audit recorded
+  two attempts. Its result stayed unchanged and schedule
+  `50d8a6f6-21f2-4398-b5fa-da7f0343ddfe` ended disabled. Only the synthetic push's
+  retry deadline was advanced to shorten the wait.
+- Built the shared application image and started API, worker, scheduler,
+  migration, PostgreSQL and Redis containers. All eight migrations applied to
+  fresh isolated test/application databases. `alembic current` returned
+  `0008 (head)`; `alembic check` found no new operations; `pip check` passed.
+  API, worker and scheduler were healthy. Docker network inspection confirmed
+  `Internal=true`; no host ports were published.
+- Inspected all six service logs: expected materialize/enqueue/start/success and
+  failed-then-sent notification events; no unexpected application errors.
+  PostgreSQL logged the deliberate duplicate-key rejection. Redis retained the
+  known host overcommit warning; no host settings were changed.
+- Isolation used project `pd-eval-scheduling-20261023`, final manifest
+  `/tmp/pd-eval-scheduling-final-20261023.json`, its own volumes/image/network,
+  no inherited application interpolation or `.env`, blank credentials and both
+  paid gates disabled. The generator's `--stub-check-in-providers` option changes
+  only isolated verification commands. Build/suite/service evidence is retained
+  locally under `/tmp/pd-scheduling-*.log`; reproducible commands are in the guide.
+  Source syntax and Git whitespace checks passed.
+  The disposable containers, network and PostgreSQL/Redis volumes were removed
+  after evidence inspection; temporary logs/manifests and the built image remain.
+
+### Remaining limits
+
+No paid model quality, real provider/device delivery, hard worker kill during a
+paid request, host power loss, database connection partition, backup restoration,
+or remote security was verified. Downtime, stale work and lease expiry use a
+controlled clock or synthetic persisted deadlines; concurrency uses independent
+database connections and real threads/processes. PostgreSQL project locks cannot
+prove provider-side exclusivity after a connection loss or timeout while remote
+work may continue. Future occurrences can still execute; operators can pause
+the schedule to require review. Notification acceptance followed by a crash may
+duplicate a push; three exhausted/unknown claims can leave it undelivered.
+Exactly-once model work and push delivery are not claimed. Migration downgrade
+with new-type data was not exercised. There is no general attempt ledger,
+authentication, generic approval-resume repair, generic notification outbox,
+or deployment to the normal stack. Prior semantic-quality and security findings
+remain open unless explicitly superseded above.
+
+The following reports describe earlier revisions. Their manual-only schedule,
+automatic stale check-in retry and best-effort check-in notification statements
+are superseded by this milestone; generic-task limitations still apply.
+
 ## Independent check-in review and evaluation — 2026-10-23
 
 Reviewed source baseline `0e96b26` from a clean working tree. Read `AGENTS.md`,

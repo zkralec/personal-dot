@@ -7,7 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from personal_dot.db import get_db
-from personal_dot.models import Schedule, ScheduleType, Task
+from personal_dot.check_in import CheckInInputError, prepare_check_in
+from personal_dot.models import Schedule, ScheduleType, Task, TaskType
 from personal_dot.schedule_calculations import (
     as_utc,
     next_cron_occurrence,
@@ -22,6 +23,17 @@ from personal_dot.schemas import (
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 DatabaseSession = Annotated[Session, Depends(get_db)]
+
+
+def _validate_check_in_inputs(task_type: TaskType, payload: dict, db: Session) -> None:
+    if task_type != TaskType.PROJECT_CHECK_IN:
+        return
+    try:
+        prepare_check_in(payload, db)
+    except CheckInInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="project check-in inputs could not be prepared") from None
 
 
 def _initial_next_run(request: ScheduleCreate, now: datetime) -> datetime:
@@ -51,6 +63,7 @@ def _initial_next_run(request: ScheduleCreate, now: datetime) -> datetime:
 
 @router.post("", response_model=ScheduleRead, status_code=status.HTTP_201_CREATED)
 def create_schedule(request: ScheduleCreate, db: DatabaseSession) -> Schedule:
+    _validate_check_in_inputs(request.task.type, request.task.payload, db)
     now = datetime.now(UTC)
     next_run = _initial_next_run(request, now)
     schedule = Schedule(
@@ -110,6 +123,7 @@ def update_schedule(
         )
 
     if request.enabled and not schedule.enabled:
+        _validate_check_in_inputs(schedule.task_type, schedule.payload, db)
         if schedule.next_run_at is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
