@@ -1,0 +1,185 @@
+name: personal-dot
+
+x-app-environment: &app-environment
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://personal_dot:personal_dot_dev@postgres:5432/personal_dot}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  RQ_QUEUE_NAME: ${RQ_QUEUE_NAME:-personal-dot}
+  RQ_JOB_TIMEOUT_SECONDS: ${RQ_JOB_TIMEOUT_SECONDS:-3600}
+  RQ_RESULT_TTL_SECONDS: ${RQ_RESULT_TTL_SECONDS:-300}
+  RQ_FAILURE_TTL_SECONDS: ${RQ_FAILURE_TTL_SECONDS:-604800}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  SCHEDULER_POLL_SECONDS: ${SCHEDULER_POLL_SECONDS:-5}
+  SCHEDULER_BATCH_SIZE: ${SCHEDULER_BATCH_SIZE:-100}
+  SCHEDULER_MAX_CATCH_UP: ${SCHEDULER_MAX_CATCH_UP:-10}
+  SCHEDULER_REQUEUE_AFTER_SECONDS: ${SCHEDULER_REQUEUE_AFTER_SECONDS:-60}
+  SCHEDULER_STALE_TASK_SECONDS: ${SCHEDULER_STALE_TASK_SECONDS:-3900}
+  NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-pushover}
+  NOTIFICATION_TIMEOUT_SECONDS: ${NOTIFICATION_TIMEOUT_SECONDS:-10}
+  PUSHOVER_API_TOKEN: ${PUSHOVER_API_TOKEN:-}
+  PUSHOVER_USER_KEY: ${PUSHOVER_USER_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+  OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
+  OPENAI_OUTPUT_VERBOSITY: ${OPENAI_OUTPUT_VERBOSITY:-medium}
+  OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-4096}
+  OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-120}
+  OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-2}
+  AGENT_MAX_TOOL_ROUNDS: ${AGENT_MAX_TOOL_ROUNDS:-8}
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-dependencies: &app-dependencies
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-personal_dot}
+      POSTGRES_USER: ${POSTGRES_USER:-personal_dot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-personal_dot_dev}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  migrate:
+    build: .
+    environment: *app-environment
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
+
+  api:
+    build: .
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on: *app-dependencies
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    restart: unless-stopped
+    logging: *default-logging
+
+  worker:
+    build: .
+    environment: *app-environment
+    command: ["python", "-m", "personal_dot.worker"]
+    depends_on: *app-dependencies
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from personal_dot.queue import get_redis; raise SystemExit(0 if get_redis().ping() else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  scheduler:
+    build: .
+    environment: *app-environment
+    command: ["python", "-m", "personal_dot.scheduler"]
+    depends_on: *app-dependencies
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from sqlalchemy import text; from personal_dot.db import engine; c=engine.connect(); c.execute(text('SELECT 1')); c.close()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  test:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://personal_dot:personal_dot_dev@postgres:5432/personal_dot_test
+      TEST_ADMIN_DATABASE_URL: postgresql://personal_dot:personal_dot_dev@postgres:5432/postgres
+      REDIS_URL: redis://redis:6379/1
+      RQ_QUEUE_NAME: personal-dot-test
+      RQ_JOB_TIMEOUT_SECONDS: 3600
+      RQ_RESULT_TTL_SECONDS: 300
+      RQ_FAILURE_TTL_SECONDS: 604800
+      LOG_LEVEL: WARNING
+      SCHEDULER_POLL_SECONDS: 5
+      SCHEDULER_BATCH_SIZE: 100
+      SCHEDULER_MAX_CATCH_UP: 10
+      SCHEDULER_REQUEUE_AFTER_SECONDS: 60
+      SCHEDULER_STALE_TASK_SECONDS: 3900
+      NOTIFICATION_PROVIDER: pushover
+      NOTIFICATION_TIMEOUT_SECONDS: 10
+      PUSHOVER_API_TOKEN: ""
+      PUSHOVER_USER_KEY: ""
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
+      OPENAI_OUTPUT_VERBOSITY: ${OPENAI_OUTPUT_VERBOSITY:-medium}
+      OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-4096}
+      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-120}
+      OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-2}
+      AGENT_MAX_TOOL_ROUNDS: ${AGENT_MAX_TOOL_ROUNDS:-8}
+      RUN_OPENAI_INTEGRATION: ${RUN_OPENAI_INTEGRATION:-0}
+    command: ["pytest"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: ["test"]
+    restart: "no"
+    logging: *default-logging
+
+volumes:
+  postgres-data:
+  redis-data:

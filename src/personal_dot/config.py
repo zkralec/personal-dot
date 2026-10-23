@@ -1,0 +1,51 @@
+from functools import lru_cache
+
+from typing import Literal
+
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    database_url: str = Field(
+        default="postgresql+psycopg://personal_dot:personal_dot_dev@localhost:5432/personal_dot"
+    )
+    redis_url: str = "redis://localhost:6379/0"
+    rq_queue_name: str = "personal-dot"
+    rq_job_timeout_seconds: int = Field(default=3600, ge=60, le=86_400)
+    rq_result_ttl_seconds: int = Field(default=300, ge=0, le=86_400)
+    rq_failure_ttl_seconds: int = Field(default=604_800, ge=0, le=2_592_000)
+    log_level: str = "INFO"
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    scheduler_poll_seconds: float = Field(default=5.0, gt=0)
+    scheduler_batch_size: int = Field(default=100, ge=1, le=1000)
+    scheduler_max_catch_up: int = Field(default=10, ge=1, le=1000)
+    scheduler_requeue_after_seconds: int = Field(default=60, ge=5)
+    scheduler_stale_task_seconds: int = Field(default=3900, ge=60)
+    notification_provider: Literal["pushover"] = "pushover"
+    notification_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    pushover_api_token: SecretStr | None = None
+    pushover_user_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-6-luna"
+    openai_reasoning_effort: Literal[
+        "none", "minimal", "low", "medium", "high", "xhigh", "max"
+    ] = "low"
+    openai_output_verbosity: Literal["low", "medium", "high"] | None = "medium"
+    openai_max_output_tokens: int = Field(default=4096, gt=0)
+    openai_timeout_seconds: float = Field(default=120.0, gt=0)
+    openai_max_retries: int = Field(default=2, ge=0, le=10)
+    agent_max_tool_rounds: int = Field(default=8, ge=1, le=32)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
