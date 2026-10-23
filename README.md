@@ -219,10 +219,16 @@ valid JSON with:
   note evidence; an action requires a current note and a supplied priority.
 
 Action kinds are advisory: `advance_priority`, `resolve_blocker`, and
-`clarify_context`. No action is executed. Schema and citation checks reject
+`clarify_context`. No action is executed. Schema and structured citation checks reject
 invalid output; they cannot prove that a model's interpretation is correct.
 Model/validation failures persist a safe task error, and summaries remain task
 results rather than becoming user preferences or new memories.
+
+The [check-in evaluation guide](evaluations/check_in/README.md) provides 21
+synthetic cases, deterministic contract checks, a human quality rubric, and
+explicitly gated paid generation. Default evaluation makes no model API calls
+and supplies no evidence of real model quality. See [STATUS](docs/STATUS.md) for
+the independent review and current validation limits.
 
 Notifications default to `none`. An explicit `on_completion` policy opts in to
 the existing status-only Pushover notification after the result commits; provider

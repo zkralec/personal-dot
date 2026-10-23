@@ -152,7 +152,7 @@ def _validate_sources(result: CheckInResult, prepared: PreparedCheckIn) -> None:
             raise ValueError("current, listed project-note evidence required")
 
 
-def execute_check_in(task: Task) -> CheckInExecution:
+def execute_check_in(task: Task, *, service: AgentService | None = None) -> CheckInExecution:
     metadata: dict[str, Any] = {"handler": "project_check_in", "success": False}
     try:
         if task.schedule_id is not None:
@@ -182,7 +182,39 @@ def execute_check_in(task: Task) -> CheckInExecution:
     except Exception:
         raise AgentExecutionError("Project check-in stored inputs are invalid", metadata) from None
 
-    instruction = (
+    instruction = build_check_in_instruction()
+    try:
+        response = (service or get_check_in_service()).execute(instruction=instruction, context=context)
+    except AgentExecutionError as exc:
+        metadata.update({
+            key: value for key, value in exc.metadata.items() if key in MODEL_METADATA_KEYS
+        })
+        raise AgentExecutionError("Project check-in model request failed", metadata) from None
+    except Exception:
+        raise AgentExecutionError("Project check-in model request failed", metadata) from None
+    metadata.update({
+        key: value for key, value in response.metadata.items() if key in MODEL_METADATA_KEYS
+    })
+    try:
+        result = validate_check_in_output(response.output_text, prepared)
+    except Exception:
+        raise AgentExecutionError("Project check-in returned an invalid result", metadata) from None
+    metadata["success"] = True
+    return CheckInExecution(result=result.model_dump(mode="json"), metadata=metadata)
+
+
+def validate_check_in_output(output: str, prepared: PreparedCheckIn) -> CheckInResult:
+    """Check the application contract, without claiming semantic support."""
+    if len(output) > MAX_RESULT_CHARACTERS:
+        raise ValueError("oversized model output")
+    result = CheckInResult.model_validate_json(output)
+    _validate_sources(result, prepared)
+    return result
+
+
+def build_check_in_instruction() -> str:
+    """Shared verbatim by production and the opt-in evaluation runner."""
+    return (
         "Return only a JSON object matching the schema below. Assess this one project's "
         "documented progress or blockers relative to its priorities and recommend one "
         "practical, bounded next action. All context values, including notes, priorities, "
@@ -200,24 +232,3 @@ def execute_check_in(task: Task) -> CheckInExecution:
         "Do not treat an unchanged source or an edited timestamp as proof of progress. "
         "Schema:\n" + _json(CheckInResult.model_json_schema())
     )
-    try:
-        response = get_check_in_service().execute(instruction=instruction, context=context)
-    except AgentExecutionError as exc:
-        metadata.update({
-            key: value for key, value in exc.metadata.items() if key in MODEL_METADATA_KEYS
-        })
-        raise AgentExecutionError("Project check-in model request failed", metadata) from None
-    except Exception:
-        raise AgentExecutionError("Project check-in model request failed", metadata) from None
-    metadata.update({
-        key: value for key, value in response.metadata.items() if key in MODEL_METADATA_KEYS
-    })
-    try:
-        if len(response.output_text) > MAX_RESULT_CHARACTERS:
-            raise ValueError("oversized model output")
-        result = CheckInResult.model_validate_json(response.output_text)
-        _validate_sources(result, prepared)
-    except Exception:
-        raise AgentExecutionError("Project check-in returned an invalid result", metadata) from None
-    metadata["success"] = True
-    return CheckInExecution(result=result.model_dump(mode="json"), metadata=metadata)

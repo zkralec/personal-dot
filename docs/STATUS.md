@@ -1,6 +1,153 @@
 # Personal Dot implementation baseline
 
-## Current status: manual project check-in
+## Independent check-in review and evaluation — 2026-10-23
+
+Reviewed source baseline `0e96b26` from a clean working tree. Read `AGENTS.md`,
+the README and documentation below, the check-in contracts/orchestration,
+adapter, API, worker, scheduler, notification boundary, models, all seven
+migrations, and relevant tests. Earlier completion statements were treated as
+claims and checked against source and a new isolated run.
+
+No critical or high-severity check-in defect was confirmed within the documented
+trusted-local, manual, advisory milestone. No critical/high fix was therefore
+required. The generic approval-resume and generic error-disclosure findings in
+the historical audit remain open; check-ins bypass that approval runtime and
+sanitize model/output failures. Authentication, a notification outbox, durable
+attempt history and remote deployment were not added to this milestone.
+
+### Findings, failure scenarios and recommended fixes
+
+| Severity | Finding and evidence | Failure scenario | Recommended follow-up |
+| --- | --- | --- | --- |
+| Medium | **Valid citation identifiers do not establish factual support.** [`_validate_sources`](../src/personal_dot/check_in.py#L129) and [`CheckInResult`](../src/personal_dot/check_in_schemas.py#L56) validate structure and selected IDs. The new `test_valid_source_ids_do_not_establish_factual_support` demonstrates acceptance of an invented production deployment and client approval when valid IDs accompany it. | A successful task can contain a false completion claim or repeat completed work. No real-model frequency or actual model failure is established by this authored probe. | Require the human factual-support/usefulness rubric before treating output as reliable advice. Keep deployment/readiness claims distinct from structural validation. Claim-level evidence would require a separately reviewed contract change. |
+| Medium | **Unknown references in prose bypass production source checks.** The same validator checks `supporting_source_ids` and action/blocker citation arrays, not IDs written inside `summary`, descriptions or rationale. The `unsupported_prose_reference` case is accepted by production and separately flagged by the evaluation runner. | A summary cites `memory:00000000-0000-0000-0000-000000000000` while its structured arrays contain selected sources. A reader may mistake the invented reference for audited evidence. | Consider forbidding inline source identifiers or validating them in the output contract. The new evaluation flags identifier-shaped unknown prose references; this detection does not fix production or validate meaning. |
+| Medium | **Prior inference can be arbitrarily old and refer to superseded content.** [`prepare_check_in`](../src/personal_dot/check_in.py#L90) matches project, note-ID set and priorities, without comparing content hashes or limiting age. `test_reuses_only_relevant_prior_successful_results` confirms reuse after a selected note is edited. | A prior recommendation to implement a guard is included after the current note says it is complete. Memory IDs remain the same despite changed evidence. The prompt labels prior inference untrusted, but model compliance has not been measured. | Review the stale/unchanged cases against genuine outputs. If anchoring appears, add explicit changed-source provenance or an omission policy for stale inference. Do not treat timestamps or an unchanged note as progress. |
+| Medium | **Recovery does not retain a durable model-attempt history.** [`_recover_stale_tasks`](../src/personal_dot/scheduler.py#L187) replaces execution metadata, and [`execute_task`](../src/personal_dot/jobs.py#L180) replaces it again on execution and completion. This is the existing shared lifecycle, not a new check-in regression. | A worker dies after a paid request, and reconciliation repeats it. PostgreSQL retains the accepted inputs and final task but cannot reconstruct all earlier attempts, costs or recovery transitions. | Add append-only attempt/transition records in the existing hardening milestone. Preserve the current at-least-once disclosure; do not claim exactly-once paid execution. |
+| Medium | **Model-error sanitization does not cover database-write diagnostics.** [`db.py`](../src/personal_dot/db.py#L13) uses the default parameter rendering, while task commits in [`main.py`](../src/personal_dot/main.py#L100) and the worker sit outside the check-in-specific safe-error boundary. A deliberately invalid foreign-key insert, rolled back in the isolated database, included a synthetic private project identifier from task JSON in its SQLAlchemy exception string. | A database write failure can expose task parameter previews in protected API/RQ diagnostics. This probe established parameter rendering, not an actual production leak or disclosure of complete notes. | In the shared diagnostic hardening milestone, hide bound parameters and add fixed database-error boundaries; account for database exception details as well as SQLAlchemy parameter rendering. Do not interpret check-in model-error tests as comprehensive log redaction. |
+| Low | **Capture time is persisted but not supplied to the model.** [`render_context`](../src/personal_dot/check_in.py#L46) omits `PreparedCheckIn.captured_at`. Notes have edit timestamps, which are not the request's as-of time. | Notes using relative dates or an old unchanged status do not establish today's state. | Supply an explicit as-of timestamp in a future versioned context and evaluate temporal interpretation; avoid resolving dates without evidence meanwhile. |
+
+### Changes made
+
+- Added the [21-case corpus](../evaluations/check_in/cases.json),
+  [runner](../src/personal_dot/check_in_evaluation.py),
+  [rubric and commands](../evaluations/check_in/README.md), and
+  [compact contract baseline](../evaluations/check_in/contract-baseline.json).
+  Twelve cases have human quality expectations; nine probe deterministic
+  contract failures/limits. No evaluation platform or dependency was added.
+  The image includes the corpus so normal container tests and the standalone
+  runner work without a source-directory mount.
+- Extracted the existing prompt and result validator so production and
+  evaluation share them verbatim; added an optional service injection point to
+  the handler. Compared the prompt expression against `0e96b26` using Python
+  ASTs: unchanged. The result schema, production model settings, permissions,
+  database schema, migrations and public API behavior remain unchanged.
+- Default evaluation uses clearly labelled authored SDK fixtures, reports
+  `quality=not_evaluated`, and programmatically checks source identifiers.
+  Both `--live` and `RUN_CHECK_IN_LIVE_EVAL=1` are required for paid generation;
+  environment opt-in alone does not enable it. Live results still require
+  human review; no automated semantic-quality score is produced.
+- Reports record prompt/corpus/schema/code hashes, model/configuration identity,
+  Python/SDK versions, per-case input identity, and response metadata when
+  available. The baseline identifies the reviewed source plus working changes
+  through code hashes. This resolves the absence of comparable evaluation
+  evidence, not the open model-quality findings above.
+- Added deterministic corpus/gating/report tests and a check-in-specific stale
+  recovery regression. Recovery preserves the queued snapshot even after source
+  deletion, resets its start time, and completes without tools or notification.
+  The suspected immediate stale retry from retaining the original start time
+  was ruled out: the reconciler clears it before requeueing. The separately
+  documented generic approval-resume defect is unchanged.
+
+### Verification and commands
+
+Final image run: **113 passed, 1 skipped**, 114 collected, in 12.19 seconds
+(the earlier run passed in 10.07 seconds).
+The skip is the explicitly gated paid generic OpenAI integration test. All
+success responses and notification sends in the suite were synthetic. The
+live-runner plumbing test also uses an SDK stub and proves no model quality.
+
+The standalone corpus run met **21/21 authored fixture expectations**. It made
+20 synthetic SDK invocations and rejected one invalid request before generation.
+Its unknown-prose-source case deliberately records production acceptance plus
+an evaluation flag; it is not a quality pass. Prompt identity:
+`78fdd1331898b68e3831a18d3492def53cc16eb5619a95c7eafedb644c02ce84`.
+Configured model was `gpt-6-luna`, reasoning `low`, verbosity `medium`, at most
+2,048 output tokens, timeout 60 seconds, retries zero, no tools and `store=false`.
+Returned fixture model was `synthetic-contract-fixture`. Full identities and
+per-case outcomes are in the committed baseline; no real model was queried.
+
+Reproducible isolation is now tracked in
+[`isolated_compose.py`](../evaluations/check_in/isolated_compose.py). This run used
+fresh project `pd-eval-review-20261023`, its own volumes/image/network, no host
+ports, an internal network, blank provider credentials, both paid gates disabled,
+and no inherited application interpolation or `.env`. The normal stack was not
+queried or modified. Run from the repository root:
+
+```bash
+python3 evaluations/check_in/isolated_compose.py \
+  --project pd-eval-review-20261023 --output /tmp/pd-eval-review-20261023.json
+docker compose -p pd-eval-review-20261023 -f /tmp/pd-eval-review-20261023.json build test
+docker compose -p pd-eval-review-20261023 -f /tmp/pd-eval-review-20261023.json run --rm test
+docker compose -p pd-eval-review-20261023 -f /tmp/pd-eval-review-20261023.json up -d --no-build --wait api worker
+docker compose -p pd-eval-review-20261023 -f /tmp/pd-eval-review-20261023.json exec -T api alembic current
+docker compose -p pd-eval-review-20261023 -f /tmp/pd-eval-review-20261023.json exec -T api alembic check
+docker compose -p pd-eval-review-20261023 -f /tmp/pd-eval-review-20261023.json exec -T api python -m pip check
+```
+
+All seven migrations applied to fresh test and application databases;
+`alembic current` returned `0007 (head)`, `alembic check` found no new upgrade
+operations, and `pip check` found no broken requirements. The full suite includes
+the real HTTP/forked RQ process workflow with a synthetic SDK provider. A separate
+HTTP request against the isolated API/worker services exercised the real
+adapter's missing-key failure: PostgreSQL retained the accepted snapshot/hash and
+fixed error, with no result, tool calls, schedules or notification. Logs showed
+the expected safe failure and healthy API/worker startup.
+After packaging the corpus, the image was rebuilt, the full suite and standalone
+runner passed without a source mount, and the final API/worker containers started
+healthy. The final manifest was `/tmp/pd-eval-review-final.json` for the same
+disposable project. Syntax, documentation file links, baseline code/corpus hashes
+and Git whitespace checks passed.
+The disposable review containers, network and PostgreSQL/Redis volumes were
+removed after verification; the built image and temporary local reports remain.
+
+The deterministic evaluator can also run without PostgreSQL/Redis, using an
+installed project environment:
+
+```bash
+python -m personal_dot.check_in_evaluation \
+  --revision "$(git rev-parse HEAD)" --output /tmp/check-in-contracts.json
+```
+
+Image-only report collection and the optional paid command are documented in
+the [evaluation guide](../evaluations/check_in/README.md). Use a new report path
+and fresh Compose project/path on reruns. The manifest generator and report
+writer refuse overwrites. Only remove the disposable project's volumes when
+finished; do not run cleanup commands against the normal stack.
+
+### Exactly what remains untested in this review
+
+- No paid OpenAI call: actual configured-model availability, request compatibility,
+  provider timeout/refusal/rate-limit behavior, real token usage and live output
+  quality remain unverified. Incomplete/unavailable/empty responses were synthetic.
+- No genuine model outputs were human-scored. Factual support, usefulness,
+  uncertainty, stale-result handling and resistance to embedded instructions or
+  external-action requests remain unmeasured. The rubric is ready for future use.
+  Relative-date interpretation was inspected as a context limitation, not tested
+  against a model. This small corpus does not establish general robustness.
+- No real Pushover delivery or other external action. Provider success/failure
+  notifications were stubs; crash windows around notification send/audit and a
+  durable delivery outbox remain untested/unimplemented.
+- Stale recovery was simulated through real PostgreSQL, not by killing a worker
+  during a paid call. Concurrent recovery, late-worker completion/fencing, host
+  reboot, network partitions and backup restoration were not exercised. The
+  suite's sequential scheduling tests do not prove those guarantees.
+- Authentication/authorization, remote exposure, database least privilege,
+  retention/deletion of task snapshots, broad adversarial testing, dependency
+  locking, static typing and linting were not newly verified or implemented.
+  The documented local-only trust boundary and historical findings still apply.
+- No deployment or data operation against the normal local stack.
+
+## Prior milestone completion report: manual project check-in
 
 Updated 2026-10-23 from audited baseline `82fef95`. The manual check-in is now
 implemented in [check_in.py](../src/personal_dot/check_in.py) and

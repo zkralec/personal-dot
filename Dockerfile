@@ -15,6 +15,7 @@ RUN python -m pip install --upgrade pip && python -m pip install ".[dev]"
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY tests ./tests
+COPY evaluations/check_in/cases.json ./evaluations/check_in/cases.json
 
 USER app
 

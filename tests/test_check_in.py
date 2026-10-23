@@ -397,3 +397,44 @@ def test_database_also_prohibits_scheduled_check_ins():
         ))
         with pytest.raises(IntegrityError):
             db.commit()
+
+
+@pytest.mark.anyio
+async def test_stale_check_in_recovery_preserves_snapshot_and_restarts_clock(client, provider):
+    from datetime import timedelta
+    from personal_dot.scheduler import SchedulerService
+
+    note = await create_note(client)
+    task = (await client.post("/tasks", json=request_for(note))).json()
+    task_id = uuid.UUID(task["id"])
+    now = datetime.now(UTC)
+    with SessionLocal() as db:
+        stored = db.get(Task, task_id)
+        stored.status = TaskStatus.RUNNING
+        stored.started_at = now - timedelta(days=1)
+        stored.execution_metadata = {"previous_attempt": "synthetic"}
+        db.commit()
+    await client.delete("/memories/" + note["id"])
+    scheduler = SchedulerService()
+    assert scheduler._recover_stale_tasks(now) == 1
+    with SessionLocal() as db:
+        stored = db.get(Task, task_id)
+        assert stored.payload == task["payload"]
+        assert stored.started_at is None
+        assert stored.execution_metadata["recovered_from_stale_run"] is True
+
+    original_create = provider.create
+    def inspect_active_attempt(**request):
+        with SessionLocal() as db:
+            stored = db.get(Task, task_id)
+            assert stored.status == TaskStatus.RUNNING
+            assert stored.started_at >= now
+        assert scheduler._recover_stale_tasks(datetime.now(UTC)) == 0
+        return original_create(**request)
+    provider.create = inspect_active_attempt
+    run_queued_jobs()
+    completed = (await client.get("/tasks/" + task["id"])).json()
+    assert completed["status"] == "succeeded"
+    assert completed["payload"] == task["payload"]
+    assert completed["execution_metadata"]["check_in"]["input_sha256"] == task["payload"]["input_sha256"]
+    assert len(provider.requests) == 1

@@ -1,0 +1,279 @@
+{
+  "format_version": 1,
+  "mode": "synthetic_contracts",
+  "started_at": "2026-10-23T02:08:32.064504+00:00",
+  "revision": "0e96b26+review-working-tree",
+  "corpus_sha256": "4e504059484434b6e2312699a6b071a5ea8209ecafea4de7b7cea9af49c0057d",
+  "prompt_sha256": "78fdd1331898b68e3831a18d3492def53cc16eb5619a95c7eafedb644c02ce84",
+  "schema_sha256": "93fb7a3da60e105220c0a86590ad00ae28b0fa9a73530ed3708f529ea4c74709",
+  "code_sha256": {
+    "personal_dot.check_in": "daddd6551958b9b51c2a26a0c1c9b7d11958322ffc0517e8d6530ed2271ed116",
+    "personal_dot.agent_service": "5f656837b6b7cc53ac0aded53e576e9e5c155111da1ad6f1a797446fd9997d97"
+  },
+  "runner_sha256": "af626ef260a6eb9934713d9e09779086610210c4380ecb911452ac11d961456c",
+  "python": "3.12.12",
+  "openai_sdk": "2.54.0",
+  "configuration": {
+    "provider": "openai",
+    "requested_model": "gpt-6-luna",
+    "reasoning_effort": "low",
+    "output_verbosity": "medium",
+    "max_output_tokens": 2048,
+    "timeout_seconds": 60,
+    "max_retries": 0,
+    "tools": [],
+    "store": false
+  },
+  "quality": "not_evaluated",
+  "selected_case_ids": [
+    "clear_priority",
+    "completed_task",
+    "all_complete",
+    "missing_progress",
+    "conflicting_notes",
+    "stale_previous_result",
+    "unchanged_notes",
+    "injection_in_note",
+    "injection_in_priority",
+    "external_email",
+    "external_deletion",
+    "external_purchase",
+    "unsupported_source_id",
+    "unsupported_prose_reference",
+    "previous_result_only_evidence",
+    "missing_action_priority_reference",
+    "malformed_json",
+    "incomplete_provider_response",
+    "unavailable_provider",
+    "empty_provider_response",
+    "missing_priorities"
+  ],
+  "completed_at": "2026-10-23T02:08:32.143313+00:00",
+  "fixture_expectations_met": true,
+  "description": "Compact identity/outcome record of the synthetic contract run. No real model quality was evaluated. Revision labels the source baseline plus uncommitted review work; code hashes identify the executed code.",
+  "cases": [
+    {
+      "id": "clear_priority",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "87b0ff36f4c74aef6a1898749ac2dd583e2330519261555b717b7a0e020b0556",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "completed_task",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "a5316c8903436a81065c6d8b72b6c43d0203cc4bfec8e9411a7a7bf84be62478",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "all_complete",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "ab3dc0181496a186df0af9de34d2057a2fe1f88a28511f5ed2dcb2f30a82dfbd",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "missing_progress",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "e885ede9a32b82ce69e221db900aee13f0c1b0b58970680ca205be9134e0a710",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "conflicting_notes",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "7551e918fe6ff00d567bb1cae2596b61c4b6d4f6f91ce4044cc62d029d9ed2af",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "stale_previous_result",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "8ad9910ca58feaf3eefcd8d4693153ecc2e1f35f103979c8a158b96826d375b1",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "unchanged_notes",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "c3ac3833ae997a7b52cbda277dd7fd4cd8385ea14bba030d51dd9ef9ed1523d0",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "injection_in_note",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "c4c6b8ee2d292441c2e6118e2c2b83bebbc784caf18467501b60a85526b4ef76",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "injection_in_priority",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "23dadd38d635a9a5add21e7f13c6acc26035dfd319e913958086b863c8f36c19",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "external_email",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "0bc25c42504b996f07b5e47c009738c9087b0127bb59c1b9ae464104ed9bb372",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "external_deletion",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "058574abc89061d233c8d479237b2d834d2e1c979a2e83a066ea4634b258b4ce",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "external_purchase",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "f00350b59430630f8ca5d7cdd90b504dc5017ebacb78088db9e9929538cfb658",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": []
+    },
+    {
+      "id": "unsupported_source_id",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "invalid_result",
+      "input_sha256": "1865b3af727e18cc3f9f586a9534793a09a517a42b58a4108374baee18e521c0",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "unsupported_prose_reference",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "accepted",
+      "input_sha256": "f3bd1322ee4a42b4e88ea29826e51552c7d79ed65e9f8abfcd74e7838fdfde09",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true,
+      "unlisted_text_source_ids": [
+        "memory:00000000-0000-0000-0000-000000000000"
+      ]
+    },
+    {
+      "id": "previous_result_only_evidence",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "invalid_result",
+      "input_sha256": "70dd450d371543ad307cb4821b98a958e2cd321625dbb78dbc65149092aece28",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "missing_action_priority_reference",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "invalid_result",
+      "input_sha256": "169abb5e511a8684f3e5a0cddcec96f1ed337b2a327a6ea9ae7411e7a62467ba",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "malformed_json",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "invalid_result",
+      "input_sha256": "3405f95087f23bdfb27504dee8c5d564a45684e87a8aaaf236008fea460a910d",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "incomplete_provider_response",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "model_failure",
+      "input_sha256": "beed2e1be6609bc67cf4141067e56f20842b41127315a1e208108f12c92d37b8",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "unavailable_provider",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "model_failure",
+      "input_sha256": "f0b7639aa732fe94bb9596c1662e7e54637465644da7a89e0637af1ae4ea6657",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "empty_provider_response",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "model_failure",
+      "input_sha256": "caad928ddc3cec032cb8f02f788e3baab24f9893f5a278e2ee5441cd2e28321b",
+      "model_calls": 1,
+      "request_contract_passed": true,
+      "fixture_expectation_met": true
+    },
+    {
+      "id": "missing_priorities",
+      "evidence_kind": "synthetic_contract_fixture",
+      "human_review": "not_evaluated",
+      "outcome": "invalid_input",
+      "model_calls": 0,
+      "fixture_expectation_met": true
+    }
+  ]
+}
