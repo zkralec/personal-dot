@@ -531,6 +531,183 @@ authentication, least-privilege DB roles, generic notification outbox, host/cras
 recovery guarantees, prior-result freshness policy and the approval-resume
 findings remain outside this milestone.
 
+## Deployment and isolated verification — 2026-10-24
+
+**Existing check-in code is now deployed at schema `0008`. No live model request
+or notification was made. All real schedules remain disabled.**
+
+Started from clean `main` at `6dfc652ea426361507ee00359e4a252cb6026c83`, after
+reading development rules, status, README, architecture/security/operations
+documentation, Compose, migrations and verification harnesses. Application code,
+dependencies, Compose and migrations were unchanged; this delivery updates only
+operations/status documentation.
+
+### Reconfirmed baseline and deployed identities
+
+Before maintenance: database `0006`, no notification outbox, installed
+API/worker/scheduler lacking `check_in` and `notification_delivery`. Health was
+OK; seven terminal tasks, two disabled generic-agent schedules, and no active
+tasks or queued/started/deferred/scheduled RQ work. The previous successful
+`notification_test_sent` event at `2026-10-23T19:50:58.332044+00:00` was reconfirmed
+without sending a push. Effective Compose database/Redis/queue targets matched
+the running installation. Intended provider credentials were present (checked
+only as booleans; no validity test or secret output).
+
+SHA-256 image prefixes; full identities are retained in protected evidence:
+
+| Service | Before | Deployed |
+| --- | --- | --- |
+| API | `0e6dbd4a08dc` | `56cb16e543d5` |
+| Worker | `136d02f1f0ae` | `43eedbf87a50` |
+| Scheduler | `65f496a1d5c7` | `c51ba65745de` |
+| Migration service | `54a0b7c2a999` | `53db3695ec34` |
+| PostgreSQL | `721873c34ceb` | unchanged |
+| Redis | `858f009f9709` | unchanged |
+
+Application images have identical filesystem layers/config except Compose
+service labels, accounting for their different IDs. Every installed Python
+application source file in API/worker/scheduler hashes identically to the
+checkout. PostgreSQL/Redis container IDs and named-volume attachments are
+unchanged. API remains loopback-only; data ports remain unpublished.
+
+### Protected backup and verified restoration
+
+Preserved directory outside Git:
+
+```text
+/home/zkralec/.local/share/personal-dot/backups/deploy-20261024T020055Z/
+```
+
+Archive: `personal_dot-before-0008.dump`, custom format, 20,112 bytes. SHA-256:
+`d40cf23e4957045806e7cf695f0d0d1de01bff885a4f49004543fbc63bec42c2`.
+Directory `0700`, files `0600`; filesystem protected, not encrypted/off-host.
+`SHA256SUMS`, before/restored/upgraded/after fingerprints and
+`restore-verification.json` accompany it. Detailed logs, commands, full image
+identities and module checks are preserved under its private `evidence/`
+directory; working evidence also remains at `/tmp/pd-deploy-20261024T020055Z/`.
+
+Stopped only API/worker/scheduler, rechecked the quiet window, and dumped via the
+running PostgreSQL service. Restored using
+`pg_restore --exit-on-error --no-owner --no-privileges` into a fresh database in a
+container pinned to the exact running PostgreSQL image, with `--network none`,
+no published ports and tmpfs data. Every table's count/ordered row-data MD5
+matched. Columns/indexes matched; all constraints were validated and matched
+after narrowly normalizing PostgreSQL's equivalent varchar-array/text-array
+cast rendering. No private row contents were displayed.
+
+The initial connection raced PostgreSQL's temporary initialization socket; no
+restore data was applied. Waiting for the final TCP listener fixed the temporary
+operator helper. The successful restore then exposed only the equivalent
+constraint rendering described above. Neither required a repository repair.
+Original ownership/ACL application and cluster-global roles were excluded from
+this restore test; it is not a complete disaster-recovery drill.
+
+Rehearsed the existing migrations on this restored copy using the new migration
+image and the restore container's network namespace, still without external
+network access. Revision reached `0008`, all existing row fingerprints remained
+identical, and the outbox was empty. Only then upgraded the real database:
+
+| Table | Before | After |
+| --- | ---: | ---: |
+| tasks | 7 | 7 |
+| schedules | 2 | 2 |
+| memories / notes / tool_calls / approval_requests | 0 each | 0 each |
+| notification_deliveries | absent | 0 |
+
+Every pre-existing non-version table fingerprint remained identical, including
+task results/metadata and complete schedule records. No real test task/memory
+was added; no shared Redis flush, persistent-volume removal, real database reset,
+downgrade or schedule enable occurred.
+
+### Commands and deployed checks
+
+Maintenance order, with protected backup/restore checks between stop and upgrade:
+
+```bash
+docker compose stop api worker scheduler
+docker compose exec -T postgres sh -c 'pg_dump --format=custom -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$BACKUP_DIR/personal_dot-before-0008.dump"
+# Restore, compare, build, then rehearse migrations on the isolated restored copy.
+docker compose build api worker scheduler migrate
+docker compose run --rm --no-deps migrate
+docker compose up --no-deps --no-build --force-recreate --exit-code-from migrate migrate
+docker compose up -d --no-deps --no-build --force-recreate --wait --wait-timeout 60 api worker scheduler
+docker compose exec -T api alembic current
+docker compose exec -T api alembic check
+docker compose exec -T api python -m pip check
+curl --fail http://127.0.0.1:8000/health
+```
+
+The second `upgrade head` refreshed the stopped Compose migration service and
+verified idempotent startup with the new image. Real revision:
+**0006 -> 0007 -> 0008**. `alembic current`: `0008 (head)`; `alembic check`: no
+new operations; `pip check`: no broken requirements; `/health`: PostgreSQL/Redis
+OK. API OpenAPI advertises `project_check_in` and terminal `uncertain`.
+API/worker/scheduler and data services are healthy; migration service exited zero.
+Inspected all six deployed service logs since deployment: normal startup and no
+errors, task/model starts, schedule materializations or notification attempts.
+RQ remains idle with one registered worker. Check-in configuration retains
+`gpt-6-luna`, output cap 2,048, timeout 60 seconds, SDK retries zero; inspecting
+these settings made no provider call.
+
+### Isolated synthetic verification
+
+Reused `evaluations/check_in/isolated_compose.py --stub-check-in-providers`, fresh
+project `pd-eval-deploy-20261024t020055z`, and the exact built API image tagged for
+that project. Validated an internal network, no published ports, blank provider
+credentials and both paid gates disabled. Only the temporary manifest's
+PostgreSQL/Redis mounts were changed to tmpfs to avoid persistent test volumes.
+Selected existing tests without enabling any schedules:
+
+```bash
+pytest tests/test_health.py tests/test_tasks.py tests/test_agent_service.py \
+  tests/test_notifications.py tests/test_tools.py tests/test_memories.py \
+  tests/test_check_in.py tests/test_check_in_evaluation.py \
+  'tests/test_check_in_process.py::test_check_in_through_http_and_forked_worker[False]' \
+  tests/test_openai_integration.py
+```
+
+**104 passed, 1 skipped**, 105 collected, 9.29 seconds. The paid integration test
+was skipped. All 21 authored evaluation cases and the manual real-HTTP/forked-RQ
+workflow are covered. This is not a rerun of the historical 133-pass scheduling
+suite; scheduling suites/parameterization were omitted to keep every schedule
+disabled, even in isolation.
+
+Also started isolated API/worker/scheduler services and ran a temporary
+manual-only adaptation of `tests/scheduled_lifecycle_smoke.py`, reusing its
+HTTP/wait helpers and existing provider bootstraps. Synthetic task
+`4d94fe08-d716-49e6-9f70-248e6497cabc` succeeded with one stub model call. Initial
+stub delivery failed; after advancing only its isolated retry deadline, the
+scheduler recorded the second stub attempt as sent. Snapshot identity and
+result remained unchanged and matched fresh HTTP/database reads. No tool calls
+or schedules existed. Inspected all six isolated service logs; no unexpected
+errors/tracebacks. No real external notification or model request occurred.
+
+Removed only this run's temporary verification/restore containers and isolated
+network; tmpfs data disappeared. No persistent volumes were removed. Protected
+backup/evidence and built images remain.
+
+### Readiness and limits
+
+Ready for separately scoped citation/diagnostic fixes, then a separately
+authorized controlled live check-in. No live request is authorized by this
+deployment milestone. Live provider compatibility, output quality, actual usage
+and cost, phone receipt/duplicates, and the process-local one-push-attempt live
+procedure remain unverified. No private notes were selected or submitted; actual
+inputs and budget remain operator decisions.
+
+Remaining findings relevant to real use: unknown IDs in prose bypass production
+citation checks; valid structured IDs do not prove factual support; generic
+unexpected/queue/DB diagnostics need broader safe boundaries; delayed generic
+approval resume and stale waiting metadata remain defective; prior inference
+has no age/content-change exclusion, and capture time is absent from model
+context. General attempt history, authentication, least-privilege database roles,
+generic notification outbox, host-power-loss/partition recovery and full role/ACL
+restoration were not added or verified. Check-ins retain the tool-free boundary.
+Both real schedules remain disabled; no check-in schedules, active tasks or
+pending/sending notification deliveries exist. Recurrence requires separate
+authorization. Older deployment/credential claims below are historical and are
+superseded where verified above.
+
 ## Controlled live verification preflight — 2026-10-23
 
 **Blocked before submission; no model request, Pushover attempt, or task creation.**

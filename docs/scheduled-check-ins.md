@@ -51,6 +51,15 @@ requesting `enabled=true` at creation is rejected. A separate PATCH is required.
 Enabling authorizes the configured recurring, potentially paid, tool-free model
 requests and the selected status-only notification policy. Keep the API local.
 
+**Deployment verified 2026-10-24:** API/worker/scheduler now match application
+source at `6dfc652`, and the normal database is at `0008`. Both existing real
+schedules remain disabled. A protected backup was restored and migration-tested
+in isolation before upgrading. Manual check-in execution and independent stub
+notification retry were verified only in isolated infrastructure. No real model
+or notification request was made. See [deployment evidence](STATUS.md).
+This supersedes the older running-version and missing-Pushover findings below;
+live input selection, budget, quality and phone verification remain outstanding.
+
 For a single live check, use [the controlled verification procedure](#controlled-live-verification)
 below. Normal notification delivery permits three attempts; it does not meet a
 one-message-attempt test budget without the maintenance procedure.
@@ -161,6 +170,122 @@ Inspect a particular task, including independent notification delivery history:
 TASK_ID=replace-with-task-uuid-from-history
 curl --fail-with-body -sS "$API_BASE/tasks/$TASK_ID" | python3 -m json.tool
 ```
+
+## Deployment without provider requests
+
+Deployment alone does not authorize a model call, a push, or recurrence. Use the
+maintenance part of this guide without its live submission/worker steps when
+those effects are outside scope. Never run test cleanup fixtures against the
+normal project. The 2026-10-24 delivery used the existing isolated generator and
+manual process tests; its temporary container smoke adaptation created no
+schedules, and all provider results were stubs. It did not run the scheduled
+smoke entry point, which explicitly enables a synthetic schedule.
+
+Before stopping anything, inspect Git status and the running service/image IDs.
+Compare the effective Compose database/Redis/queue targets to the running
+configuration without printing credentials. Verify there are no active tasks,
+enabled schedules, queued/deferred/scheduled RQ jobs or pending notification
+deliveries. If these conditions fail, stop and arrange a maintenance window;
+do not cancel or flush existing work to make deployment fit. Keep other clients
+from submitting work during the window.
+
+### Protected backup and isolated restore
+
+The following backup/restore commands are for an explicitly authorized
+maintenance window. First confirm the PostgreSQL service's `POSTGRES_DB` is the
+application's actual database. Record original table counts/data fingerprints,
+schema catalogs, revision, container/image IDs and volume attachments privately.
+Recheck idle task/schedule controls after the application processes stop.
+
+```bash
+set -euo pipefail
+umask 077
+BACKUP_ROOT="$HOME/.local/share/personal-dot/backups"
+mkdir -p "$BACKUP_ROOT"
+chmod 700 "$BACKUP_ROOT"
+BACKUP_DIR=$(mktemp -d "$BACKUP_ROOT/deploy-XXXXXXXX")
+docker compose stop api worker scheduler
+# Recheck the quiet-window controls before creating the archive.
+docker compose exec -T postgres sh -c \
+  'pg_dump --format=custom -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "$BACKUP_DIR/personal_dot-before-upgrade.dump"
+sha256sum "$BACKUP_DIR/personal_dot-before-upgrade.dump" > "$BACKUP_DIR/SHA256SUMS"
+POSTGRES_IMAGE=$(docker inspect "$(docker compose ps -q postgres)" --format '{{.Image}}')
+RESTORE_CONTAINER="pd-restore-$(date -u +%Y%m%d%H%M%S)"
+docker run -d --name "$RESTORE_CONTAINER" --network none \
+  --mount type=tmpfs,destination=/var/lib/postgresql/data \
+  -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=personal_dot_restore \
+  "$POSTGRES_IMAGE"
+# Initialization briefly starts a socket-only server. Wait for the final TCP
+# listener so a successful readiness probe cannot race its planned shutdown.
+for attempt in $(seq 1 100); do
+  if docker exec "$RESTORE_CONTAINER" pg_isready -h 127.0.0.1 \
+    -U postgres -d personal_dot_restore >/dev/null; then
+    break
+  fi
+  sleep 0.2
+done
+docker exec "$RESTORE_CONTAINER" pg_isready -h 127.0.0.1 \
+  -U postgres -d personal_dot_restore
+docker exec -i "$RESTORE_CONTAINER" pg_restore \
+  --exit-on-error --no-owner --no-privileges -U postgres -d personal_dot_restore \
+  < "$BACKUP_DIR/personal_dot-before-upgrade.dump" \
+  > "$BACKUP_DIR/restore.log" 2>&1
+```
+
+Use only the newly created restore container: no host ports, no external network,
+no real credentials, and no persistent data volume. Successful `pg_restore`
+alone is insufficient: compare all restored table counts and ordered row-data
+fingerprints to the original snapshot, along with columns, indexes, validated
+constraints and Alembic revision. Use consistent UTC rendering and row ordering.
+PostgreSQL may reparse equivalent array casts in CHECK constraints; explain any
+such representation change rather than accepting unexplained differences.
+The 2026-10-24 run preserved its comparison reports beside the archive, without
+displaying row contents. Ownership/ACL application and cluster-global role
+restoration were excluded, so this does not prove full disaster recovery.
+
+### Build, rehearse and upgrade
+
+After successful restore verification, build the existing application. Rehearse
+the pending migrations on the isolated restored database before upgrading the
+real database; verify original records remain unchanged after rehearsal.
+
+```bash
+docker compose build api worker scheduler migrate
+MIGRATION_IMAGE=$(docker image inspect personal-dot-migrate --format '{{.Id}}')
+docker run --rm --network "container:$RESTORE_CONTAINER" \
+  -e DATABASE_URL=postgresql+psycopg://postgres@127.0.0.1:5432/personal_dot_restore \
+  -e OPENAI_API_KEY= -e PUSHOVER_API_TOKEN= -e PUSHOVER_USER_KEY= \
+  "$MIGRATION_IMAGE" alembic upgrade head
+# Require the expected revision and unchanged pre-existing row fingerprints.
+docker compose run --rm --no-deps migrate
+# Refresh the stopped Compose migration service; upgrade-head is idempotent.
+docker compose up --no-deps --no-build --force-recreate --exit-code-from migrate migrate
+# Recheck no active work, enabled schedules or pending deliveries before start.
+docker compose up -d --no-deps --no-build --force-recreate --wait \
+  --wait-timeout 60 api worker scheduler
+```
+
+The rehearsal shares the restore container's network namespace, which still has
+no external network. The `--no-deps` deployment commands preserve already-correct
+PostgreSQL/Redis containers and volumes. Service-specific image IDs may differ
+because of Compose labels: compare filesystem layers and installed source hashes
+as well as recording image IDs. Inspect `alembic current`, `alembic check`,
+`pip check`, `/health`, OpenAPI, idle-work/delivery controls and all service logs.
+Verify every pre-existing record's fingerprint and that recurrence remains
+disabled. Health alone does not verify check-in execution or provider delivery.
+
+After inspecting restore/rehearsal evidence, remove only the temporary restore
+container; retain the protected archive, checksums and reports:
+
+```bash
+docker stop "$RESTORE_CONTAINER"
+docker rm "$RESTORE_CONTAINER"
+```
+
+Backups contain private task data. Keep them out of Git/build context and protect
+the backup directory (`0700`) and files (`0600`). This local backup is not
+encrypted, off-host, or a reason to downgrade/reset the real installation.
 
 ## Controlled live verification
 
