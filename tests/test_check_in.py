@@ -446,3 +446,40 @@ async def test_stale_check_in_is_uncertain_without_model_retry(client, provider)
     assert completed["execution_metadata"]["previous_attempt"] == "synthetic"
     assert completed["execution_metadata"]["execution_outcome"] == "unknown"
     assert not provider.requests
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("late_failure", [False, True])
+async def test_manual_late_worker_cannot_overwrite_uncertain(client, provider, late_failure):
+    from datetime import timedelta
+    from personal_dot.scheduler import SchedulerService
+
+    note = await create_note(client)
+    task = (await client.post("/tasks", json=request_for(note))).json()
+    task_id = uuid.UUID(task["id"])
+    original = provider.create
+    recovered = {}
+
+    def interrupted(**request):
+        with SessionLocal() as db, db.begin():
+            stored = db.get(Task, task_id)
+            assert stored.execution_id is not None
+            stored.started_at = datetime.now(UTC) - timedelta(days=1)
+        assert SchedulerService()._recover_stale_tasks(datetime.now(UTC)) == 1
+        with SessionLocal() as db:
+            stored = db.get(Task, task_id)
+            assert stored.execution_id is None
+            recovered.update({column.name: getattr(stored, column.name)
+                              for column in Task.__table__.columns})
+        if late_failure:
+            raise RuntimeError("synthetic late provider failure")
+        return original(**request)
+
+    provider.create = interrupted
+    jobs.execute_task(task["id"])
+    jobs.execute_task(task["id"])
+    with SessionLocal() as db:
+        stored = db.get(Task, task_id)
+        assert stored.status == TaskStatus.UNCERTAIN
+        assert {column.name: getattr(stored, column.name)
+                for column in Task.__table__.columns} == recovered

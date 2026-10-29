@@ -269,6 +269,8 @@ class Task(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    # Fences writes by workers whose claim was revoked by stale recovery.
+    execution_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     agent_state: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     schedule_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("schedules.id", ondelete="RESTRICT"), nullable=True

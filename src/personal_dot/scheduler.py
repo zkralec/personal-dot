@@ -211,6 +211,8 @@ class SchedulerService:
                 )
                 if task is None:
                     continue
+                # Revoke the claim before publishing recovery/uncertainty.
+                task.execution_id = None
                 if task.type == TaskType.PROJECT_CHECK_IN:
                     task.status = TaskStatus.UNCERTAIN
                     task.completed_at = now

@@ -342,6 +342,7 @@ class AgentRuntime:
             pending_outputs, still_pending = self._resume_pending(state)
             if still_pending:
                 return AgentPaused(state=state, metadata=metadata)
+            metadata.pop("waiting_for_approval", None)
             input_items.extend(pending_outputs)
         else:
             input_items = self.service.build_input(

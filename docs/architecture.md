@@ -329,6 +329,25 @@ redelivered, except check-ins: they become terminal `uncertain`, retain their
 snapshot and metadata, and reject late writes. Check-in model execution has no
 automatic retry; its notification intent is handled independently.
 
+Every claim assigns a fresh PostgreSQL `execution_id` UUID and resets
+`started_at` to the current execution's start, including approval resumes.
+Approval waiting time therefore cannot immediately age a resumed execution into
+recovery. Recovery revokes ownership; pause, success and failure release it.
+Every worker pause/result/failure write locks the current task row and requires
+both `running` status and its own execution UUID. An obsolete worker cannot
+overwrite recovered state or a newer execution, even while that newer execution
+is also running. Duplicate delivery cannot claim an already running task. Waiting
+metadata is removed when work resumes and on terminal completion; private
+continuation state is retained for recovery and cleared on terminal completion.
+Migration `0009` adds only the nullable ownership column; historical rows are
+unchanged apart from that null column. Stop old runtime processes before upgrade:
+old binaries do not enforce fencing.
+
+This fences task outcomes, not remote requests or arbitrary handler side effects.
+Recovery cannot cancel an old handler or provider request. There is no heartbeat,
+lease renewal or append-only execution-attempt ledger. Existing tool-call row
+locks and successful-call reuse still apply to approved local writes.
+
 The system guarantees at most one PostgreSQL task record per schedule
 occurrence. It does **not** guarantee exactly-once handler or model execution.
 Delivery is at least once: if a worker or lease fails after a model request

@@ -29,6 +29,7 @@ class JsonFormatter(logging.Formatter):
         for key in (
             "event",
             "task_id",
+            "execution_id",
             "task_type",
             "schedule_id",
             "scheduled_for",

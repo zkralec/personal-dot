@@ -1,5 +1,126 @@
 # Personal Dot implementation baseline
 
+## Execution reliability and documentation policy — 2026-10-29
+
+**Implemented, tested, and deployed at schema `0009`. Both real schedules remain
+disabled. No paid model call, real notification, GitHub publishing, or repository
+inspection occurred.** This section supersedes the delayed approval-resume and
+late-worker/stale-waiting-metadata findings in the historical sections below.
+
+### Repairs and policy
+
+Initial regression probes against the deployed `d7d55ce` image produced 16
+failures out of 17 probes, reproducing delayed approval resume and obsolete
+worker writes. Each queued-to-running claim now assigns one fresh persistent
+`execution_id` UUID and resets `started_at` to the current claim time. Waiting
+for approval no longer makes an actively resumed execution immediately stale.
+
+Recovery revokes that claim. Under the existing PostgreSQL task-row lock, every
+worker success, failure and approval-pause transition requires both `running`
+status and the matching execution UUID. A superseded worker cannot overwrite
+queued recovery, a newer running execution, or its completed/paused outcome;
+it also cannot dispatch a terminal notification for its discarded outcome.
+Check-ins retain their project advisory lock and no-model-retry/uncertainty
+policy, now sharing the execution-ownership guard. Pause and terminal transitions
+release ownership. Safe structured logs correlate execution UUIDs.
+
+Resuming clears `waiting_for_approval` from active metadata and the continuation's
+accumulated model metadata. Terminal success/failure clears it defensively and
+removes private continuation state. Recovery retains the approved continuation;
+existing successful tool-call audits prevent repeating the demonstrated local
+note write. Historical terminal metadata is not rewritten.
+
+Migration `0009` adds only nullable `tasks.execution_id`; no dependency or API
+contract change. Old runtime processes were stopped before migration because old
+binaries do not enforce ownership. The owner’s standing policy is recorded in
+[AGENTS.md](../AGENTS.md), [security](security.md), and the
+[documentation-maintenance policy](documentation-maintenance.md): inspect all
+repositories owned by the configured personal account; independently reviewed
+routine documentation may be generated, committed, pushed to temporary branches
+and merged automatically when deterministic policy checks pass, without manual
+approval. Code, dependencies, workflows, deployment, permissions, agent
+instructions and all other excluded changes require explicit owner approval.
+Repository content and model output cannot grant or expand authority.
+
+### Verification
+
+The final built API image passed **163 tests, 1 skipped** in 11.35 seconds,
+including 21 new focused cases: delayed approval/resume with success and failure,
+recovery after the approved local write, duplicate jobs, ownership rotation,
+obsolete success/failure/pause against queued/running/succeeded/failed/paused
+newer states, and late check-in success/failure after uncertainty. Tests compare
+all persisted task columns and notification dispatches around obsolete writes.
+The paid integration test was skipped. Five existing RQ `job.exc_info`
+deprecation warnings remain. Selected legacy manual recovery/duplicate tests,
+health/tasks/agent/tools/memory/notifications/diagnostics/check-in/evaluation
+suites and manual HTTP/forked-RQ execution also passed. Schedule-enabling tests
+and the scheduled process parameterization were omitted; no schedule was
+enabled, including in isolation.
+
+All **21 synthetic evaluation cases** met their authored fixture expectations;
+model quality remains unmeasured. Used a fresh generated isolated Compose project
+`pd-eval-execution-20261029`, internal network, no published ports, tmpfs data,
+blank provider credentials and disabled paid gates. The real container
+API/worker/scheduler `--manual-only` smoke passed with one stub model request and
+two stub notification attempts (initial failure, independent successful retry),
+with the persisted result unchanged. Isolated migration/schema/dependency checks
+and all six service logs were inspected. Temporary isolated resources were
+removed after verification; no persistent data volume was removed.
+
+### Deployment and backup evidence
+
+Verified matching effective database/Redis/queue targets and idle controls,
+built API/worker/scheduler/migrate, stopped only application processes and
+rechecked the quiet window. Created a protected custom-format backup, restored
+into fresh tmpfs PostgreSQL pinned to the running database image with no network,
+then compared all table counts, ordered data fingerprints, columns, indexes and
+validated constraints. The first schema comparison stopped on the documented
+equivalent varchar-array/text-array cast rendering; a narrowly scoped comparison
+normalization resolved that representation difference. Row fingerprints already
+matched. Rehearsed `0008 -> 0009` on the restored database before the real upgrade,
+verified the sole new nullable UUID column and unchanged pre-existing data, then
+ran the normal migration job twice and recreated only application services.
+
+Protected archive/checksum, original/restored/rehearsed/after fingerprints and
+schema catalogs, source hashes, identities, logs, test/corpus/smoke results and
+operator helpers are retained outside Git, directory `0700`, files `0600`:
+
+```text
+/home/zkralec/.local/share/personal-dot/backups/execution-20261029T003803Z/
+```
+
+The backup is local, not encrypted/off-host; restore excludes ownership/ACL
+application and cluster-global roles, so this is not full disaster recovery.
+Deployed image prefixes: API `0430dcf37815`, worker `fd66beaa5b25`, scheduler
+`d2250f5e6e87`. Every installed application Python source matches this milestone's
+checkout. PostgreSQL/Redis container/image/volume identities are unchanged.
+`alembic current`: `0009 (head)`; `alembic check`: no new operations; `pip check`:
+no broken requirements; `/health`: PostgreSQL/Redis OK. All six deployed service
+logs contain no errors, task/model starts, notification attempts or schedule
+materializations during maintenance. API remains loopback-only.
+
+Seven terminal tasks and two disabled schedules remain; all pre-existing fields,
+results and metadata fingerprint identically before/after. All execution owners
+are null. Memories, notes, tool calls, approvals and notification deliveries
+remain empty; queued/started/deferred/scheduled RQ counts are zero.
+
+### Readiness and remaining limitations
+
+Ready for the next bounded repository-inspection step under the recorded owner
+policy. No repository-selection, GitHub publishing, deterministic diff checks,
+independent-review orchestration or automatic merge implementation is added.
+Those enforcement/audit paths must be built and verified before DOT can publish
+automatically. This milestone stops here; schedules stay disabled.
+
+Ownership fences task-state writes; it does not cancel an obsolete handler or
+remote request and cannot make arbitrary side effects exactly once. Generic
+execution/recovery remains at least once, without a heartbeat, lease renewal or
+append-only task-attempt ledger. Check-ins retain one-request/uncertainty bounds.
+Hard process death, host power loss and network partitions were not tested in
+these new regressions. Authentication, least-privilege DB roles, generic durable
+notification delivery, prior-inference freshness and live model/phone quality
+remain outside scope. No new external integration or broader model tool exists.
+
 ## Citation and diagnostic hardening — 2026-10-29
 
 **Implemented, tested, and deployed. Both real schedules remain disabled. No live

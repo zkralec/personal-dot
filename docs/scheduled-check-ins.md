@@ -527,7 +527,9 @@ metadata. Transport timeout/connection failures also become `uncertain`, because
 the provider may have accepted work. Late worker completion/failure cannot
 overwrite that state. An uncertainty record is not proof of model failure,
 success, cost, or cancellation; the operator must inspect before submitting a
-new manual task. Generic agent/approval recovery is unchanged.
+new manual task. Generic agent/approval recovery resets the active start time on each claim and
+uses an execution UUID to reject obsolete task-state writes (`0009`); it remains
+at least once. See [execution ownership](architecture.md#recovery-and-delivery-guarantees).
 
 Uncertainty terminates that task; it does not automatically pause the schedule
 or block the project forever. Future occurrences remain eligible after the
@@ -601,4 +603,4 @@ partition, backup restoration, or remote security is established by these tests.
 The project lock relies on PostgreSQL connection ownership and cannot guarantee
 provider-side exclusivity after a lost connection while a remote request is
 still executing. Exactly-once paid work is not claimed. There is no general
-append-only task-attempt ledger, authentication, or generic approval-resume fix.
+append-only task-attempt ledger or authentication.

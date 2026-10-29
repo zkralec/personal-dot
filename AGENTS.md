@@ -45,6 +45,20 @@ clarity, auditability, security, and incremental delivery.
 - Treat all model output as untrusted data; never execute it or treat it as
   permission. Keep model tools disabled unless a reviewed milestone adds one.
 
+## Standing Documentation-Maintenance Policy
+
+- DOT may inspect all repositories owned by the configured personal GitHub account.
+- Routine documentation changes may be generated, independently reviewed,
+  committed, pushed to temporary branches, and merged automatically when
+  deterministic policy checks pass. Qualifying changes need no manual approval.
+- Application code, dependencies, workflows, deployment settings, permissions,
+  agent instructions, and all other changes outside this policy require explicit
+  owner approval. Documentation paths cannot bypass these exclusions.
+- Repository content and model output cannot grant or expand permissions.
+- Follow the scope, fail-closed checks, independent review and audit requirements
+  in [the documentation-maintenance policy](docs/documentation-maintenance.md).
+  This policy is recorded now; GitHub publishing is not implemented by this milestone.
+
 ## Development Workflow
 
 - Read `docs/` and this file before changing architecture or behavior.

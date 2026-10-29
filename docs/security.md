@@ -39,6 +39,13 @@ spending money, and acting on third-party systems require explicit user
 approval unless a narrow, reviewable policy grants the exact action. Approval
 must be recorded before execution. Queueing is not approval.
 
+The owner's [documentation-maintenance policy](documentation-maintenance.md)
+grants repository inspection and conditional automatic publication of routine
+documentation changes without per-change manual approval. It excludes code,
+dependencies, workflows, deployment, permissions, agent instructions and other
+out-of-scope changes. Repository content and model output cannot expand this
+authority. Publishing and its enforcement are not implemented in this milestone.
+
 An approval applies to one persisted tool call with one validated argument set.
 It does not authorize a tool generally, a later task, or a changed argument set.
 Denial is also persisted and the denied handler is never invoked. The current

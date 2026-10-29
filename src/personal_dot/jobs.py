@@ -199,6 +199,17 @@ def _execute_with_project_lock(task_id: str) -> dict[str, Any]:
         return {}
 
 
+def _owns_execution(task: Task, execution_id: uuid.UUID) -> bool:
+    # Call only after locking the current database row, never on a handler snapshot.
+    owns = task.status == TaskStatus.RUNNING and task.execution_id == execution_id
+    if not owns:
+        logger.info("Obsolete task execution write skipped", extra={
+            "event": "task_execution_write_skipped", "task_id": str(task.id),
+            "execution_id": str(execution_id),
+        })
+    return owns
+
+
 def _execute_task(task_id: str) -> dict[str, Any]:
     parsed_id = uuid.UUID(task_id)
     with SessionLocal() as session:
@@ -218,8 +229,12 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             )
             return task.result or {}
         task.status = TaskStatus.RUNNING
-        if task.started_at is None:
-            task.started_at = datetime.now(UTC)
+        execution_id = uuid.uuid4()
+        task.execution_id = execution_id
+        # Approval wait time and previous executions are not active runtime.
+        task.started_at = datetime.now(UTC)
+        task.execution_metadata = dict(task.execution_metadata or {})
+        task.execution_metadata.pop("waiting_for_approval", None)
         task.completed_at = None
         task.result = None
         task.error = None
@@ -229,7 +244,8 @@ def _execute_task(task_id: str) -> dict[str, Any]:
         session.commit()
         logger.info(
             "Task execution started",
-            extra={"event": "task_started", "task_id": task_id},
+            extra={"event": "task_started", "task_id": task_id,
+                   "execution_id": str(execution_id)},
         )
 
     try:
@@ -241,8 +257,9 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             )
             if task is None:
                 raise LookupError(f"task {task_id} does not exist") from exc
-            if task.type == TaskType.PROJECT_CHECK_IN and task.status != TaskStatus.RUNNING:
+            if not _owns_execution(task, execution_id):
                 return task.result or {}
+            task.execution_id = None
             task.status = TaskStatus.FAILED
             task.completed_at = datetime.now(UTC)
             task.result = None
@@ -260,6 +277,7 @@ def _execute_task(task_id: str) -> dict[str, Any]:
                     "success": False,
                 }
             task.execution_metadata = {**schedule_metadata, **task.execution_metadata}
+            task.execution_metadata.pop("waiting_for_approval", None)
             if task.type == TaskType.PROJECT_CHECK_IN and task.execution_metadata.get("request_outcome") == "unknown":
                 task.status = TaskStatus.UNCERTAIN
                 task.error = "Project check-in request interrupted; provider outcome unknown; automatic execution retry disabled"
@@ -273,6 +291,7 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             extra={
                 "event": "task_failed",
                 "task_id": task_id,
+                "execution_id": str(execution_id),
                 "model": log_metadata.get("model"),
                 "response_id": log_metadata.get("response_id"),
                 "request_id": log_metadata.get("request_id"),
@@ -288,6 +307,9 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             )
             if task is None:
                 raise LookupError(f"task {task_id} does not exist")
+            if not _owns_execution(task, execution_id):
+                return task.result or {}
+            task.execution_id = None
             task.status = TaskStatus.WAITING_FOR_APPROVAL
             task.agent_state = result.state
             task.execution_metadata = result.metadata
@@ -295,7 +317,8 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             session.commit()
         logger.info(
             "Task is waiting for tool approval",
-            extra={"event": "task_waiting_for_approval", "task_id": task_id},
+            extra={"event": "task_waiting_for_approval", "task_id": task_id,
+                   "execution_id": str(execution_id)},
         )
         return {"status": TaskStatus.WAITING_FOR_APPROVAL.value}
 
@@ -305,11 +328,13 @@ def _execute_task(task_id: str) -> dict[str, Any]:
         )
         if task is None:
             raise LookupError(f"task {task_id} does not exist")
-        if task.type == TaskType.PROJECT_CHECK_IN and task.status != TaskStatus.RUNNING:
+        if not _owns_execution(task, execution_id):
             return task.result or {}
+        task.execution_id = None
         task.status = TaskStatus.SUCCEEDED
         task.result = result.result
         task.execution_metadata = {**schedule_metadata, **result.metadata}
+        task.execution_metadata.pop("waiting_for_approval", None)
         task.agent_state = None
         task.completed_at = datetime.now(UTC)
         ensure_notification(session, task, task.completed_at)
@@ -317,6 +342,7 @@ def _execute_task(task_id: str) -> dict[str, Any]:
     _notify_terminal_task(parsed_id)
     logger.info(
         "Task execution succeeded",
-        extra={"event": "task_succeeded", "task_id": task_id},
+        extra={"event": "task_succeeded", "task_id": task_id,
+               "execution_id": str(execution_id)},
     )
     return result.result
