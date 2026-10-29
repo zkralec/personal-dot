@@ -7,6 +7,7 @@ from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from personal_dot.check_in_schemas import CheckInRequest
+from personal_dot.github import repository_name
 
 from personal_dot.models import (
     ApprovalStatus,
@@ -74,6 +75,21 @@ class AgentTaskPayload(BaseModel):
         return value
 
 
+class GitHubDiscoveryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    page: int = Field(default=1, ge=1, le=1_000_000)
+
+
+class GitHubInspectionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repository: str = Field(min_length=1, max_length=100)
+
+    @field_validator("repository")
+    @classmethod
+    def validate_repository(cls, value: str) -> str:
+        return repository_name(value)
+
+
 class TaskCreate(BaseModel):
     type: TaskType = TaskType.ECHO
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -87,6 +103,11 @@ class TaskCreate(BaseModel):
         elif self.type == TaskType.PROJECT_CHECK_IN:
             check_in = CheckInRequest.model_validate(self.payload)
             self.payload = check_in.model_dump(mode="json")
+        elif self.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT}:
+            model = GitHubDiscoveryPayload if self.type == TaskType.GITHUB_DISCOVER else GitHubInspectionPayload
+            self.payload = model.model_validate(self.payload).model_dump(mode="json")
+            if self.notification_policy != NotificationPolicy.NONE:
+                raise ValueError("GitHub read tasks require notification_policy=none")
         return self
 
 
@@ -144,6 +165,8 @@ class ScheduleCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_schedule_configuration(self) -> "ScheduleCreate":
+        if self.task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT}:
+            raise ValueError("GitHub discovery and inspection are manual tasks only")
         if self.task.type == TaskType.PROJECT_CHECK_IN:
             if "enabled" not in self.model_fields_set:
                 self.enabled = False

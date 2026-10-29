@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     openai_max_output_tokens: int = Field(default=4096, gt=0)
     openai_timeout_seconds: float = Field(default=120.0, gt=0)
     openai_max_retries: int = Field(default=2, ge=0, le=10)
+    # GitHub credentials are file-backed; no key/token values enter task data.
+    github_owner: str = ""
+    github_app_id: int | None = Field(default=None, ge=1)
+    github_installation_id: int | None = Field(default=None, ge=1)
+    github_app_private_key_path: str = ""
+    github_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    github_response_bytes: int = Field(default=2_097_152, ge=1024, le=8_388_608)
+    github_max_pages: int = Field(default=100, ge=1, le=100)
+    github_inventory_entries: int = Field(default=2000, ge=1, le=10_000)
+    github_tree_requests: int = Field(default=64, ge=1, le=200)
+    github_max_files: int = Field(default=40, ge=1, le=100)
+    github_file_bytes: int = Field(default=65_536, ge=1, le=262_144)
+    github_context_bytes: int = Field(default=262_144, ge=2, le=1_048_576)
     agent_max_tool_rounds: int = Field(default=8, ge=1, le=32)
 
 

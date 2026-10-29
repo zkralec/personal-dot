@@ -3,10 +3,13 @@
 from typing import Any
 
 from redis.exceptions import RedisError
+from personal_dot.github_errors import GitHubError, safe_code
 from sqlalchemy.exc import SQLAlchemyError
 
 
 def error_class(error: BaseException) -> str:
+    if isinstance(error, GitHubError):
+        return "github_" + safe_code(error)
     if isinstance(error, SQLAlchemyError):
         return "database_error"
     if isinstance(error, (ConnectionError, RedisError)):

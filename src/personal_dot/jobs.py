@@ -13,6 +13,9 @@ from personal_dot.config import get_settings
 from personal_dot.db import SessionLocal, engine
 from personal_dot.diagnostics import agent_error_message, error_class, failure_metadata
 from personal_dot.memory_service import get_memory_service
+from personal_dot.github import get_github_client
+from personal_dot.github_errors import GitHubError, safe_code, safe_message
+from personal_dot.repository_inspection import discover, inspect_repository
 from personal_dot.models import Task, TaskStatus, TaskType
 from personal_dot.notification_service import (
     TaskNotification,
@@ -32,6 +35,24 @@ class TaskExecutionResult:
 
 
 def _perform(task: Task) -> TaskExecutionResult | AgentPaused:
+    if task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT}:
+        with engine.connect() as connection, connection.begin():
+            if task.type == TaskType.GITHUB_INSPECT and not connection.scalar(text(
+                "SELECT pg_try_advisory_xact_lock(743201, 1)"
+            )):
+                raise GitHubError("overlap")
+            client = get_github_client()
+            try:
+                snapshot = (discover(client, task.payload["page"]) if task.type == TaskType.GITHUB_DISCOVER
+                            else inspect_repository(client, task.payload["repository"]))
+                return TaskExecutionResult(result=snapshot, metadata={
+                    "handler": task.type.value, "success": True, "provider": "github",
+                    "github": {"policy_version": snapshot["policy_version"],
+                               "repository_id": snapshot.get("repository", {}).get("id"),
+                               "commit": snapshot.get("commit")},
+                })
+            finally:
+                client.close()
     if task.type == TaskType.PROJECT_CHECK_IN:
         check_in = execute_check_in(task)
         return TaskExecutionResult(result=check_in.result, metadata=check_in.metadata)
@@ -67,7 +88,7 @@ def _perform(task: Task) -> TaskExecutionResult | AgentPaused:
 def _notify_terminal_task(task_id: uuid.UUID) -> None:
     with SessionLocal() as session:
         task = session.get(Task, task_id)
-        if task is None or not should_notify(task.notification_policy, task.status):
+        if task is None or task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT} or not should_notify(task.notification_policy, task.status):
             return
         if task.type == TaskType.PROJECT_CHECK_IN:
             deliver_notification(task_id, service_factory=get_notification_service)
@@ -268,6 +289,8 @@ def _execute_task(task_id: str) -> dict[str, Any]:
                 if isinstance(exc, AgentExecutionError)
                 else f"Task execution failed ({error_class(exc)})"
             )
+            if isinstance(exc, GitHubError):
+                task.error = safe_message(exc)
             task.agent_state = None
             if isinstance(exc, AgentExecutionError):
                 task.execution_metadata = failure_metadata(exc.metadata)
@@ -276,6 +299,8 @@ def _execute_task(task_id: str) -> dict[str, Any]:
                     "handler": task.type.value,
                     "success": False,
                 }
+            if isinstance(exc, GitHubError):
+                task.execution_metadata["github"] = {"error_code": safe_code(exc)}
             task.execution_metadata = {**schedule_metadata, **task.execution_metadata}
             task.execution_metadata.pop("waiting_for_approval", None)
             if task.type == TaskType.PROJECT_CHECK_IN and task.execution_metadata.get("request_outcome") == "unknown":

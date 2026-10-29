@@ -171,3 +171,17 @@ recommendation-bearing push would require a separately reviewed content policy.
   uncertain or recovers generic work. Inspect task/job IDs and health to correlate.
 - Backups and restore tests are required before Personal Dot stores important
   personal information.
+
+## GitHub read boundary
+
+[Repository inspection](github-inspection.md) authenticates only as the configured
+personal-account App installation. Worker receives an owner-only RSA key as a
+single read-only bind mount, runs as its non-root owner UID, and requests only
+Contents/Metadata read tokens (one repository for inspection). API/scheduler do
+not receive the key. Credentials never enter task inputs/results, URLs, logs or
+model context. Fixed-origin HTTPS, refused redirects, bounded responses and safe
+errors protect transport boundaries. No repository script or instruction runs;
+source is untrusted evidence. Retained private repository text is sensitive even
+after heuristic path/content secret exclusion. Discovery cannot expose private
+repositories outside the installation grant. GitHub tasks cannot notify or be
+scheduled and have no publishing methods.

@@ -6,6 +6,8 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from redis import Redis
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -30,6 +32,15 @@ app.include_router(notification_router)
 app.include_router(tool_router)
 app.include_router(memory_router)
 DatabaseSession = Annotated[Session, Depends(get_db)]
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_github_validation(request: Request, exc: RequestValidationError) -> Response:
+    body = exc.body if isinstance(exc.body, dict) else {}
+    nested = body.get("task") if isinstance(body.get("task"), dict) else {}
+    if body.get("type") in ("github_discover", "github_inspect") or nested.get("type") in ("github_discover", "github_inspect"):
+        return JSONResponse(status_code=422, content={"detail": "invalid GitHub task request"})
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.middleware("http")

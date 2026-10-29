@@ -399,3 +399,16 @@ decision.
 - The official OpenAI Python SDK is used directly behind one small service and
   its supported function-call protocol; there is no agent framework or text
   parsing protocol.
+
+## Read-only repository inspection
+
+Manual `github_discover` and `github_inspect` tasks reuse the task API, RQ worker,
+execution UUID fencing, recovery and PostgreSQL JSON results. Migration `0010`
+adds their task-type constraint values; schedule types remain unchanged. The
+GitHub client signs file-backed App JWTs and exchanges them for short-lived,
+read-only installation tokens after checking the configured personal owner.
+Only the optional worker override mounts the protected key. Inspection holds a
+PostgreSQL advisory lock, resolves one default-branch commit, then collects
+bounded tree/blob evidence by immutable SHA, with hashes and explicit exclusions.
+No model, tools, checkout, script execution, notifications or publishing path is
+added. See [configuration, API and bounds](github-inspection.md).

@@ -1,0 +1,25 @@
+# Optional trusted operator configuration. Mount the key only into the worker.
+# UID/GID must match the owner-only host file; no host permissions are widened.
+services:
+  worker:
+    user: "${DOT_GITHUB_UID:?Set the key owner UID}:${DOT_GITHUB_GID:?Set the key owner GID}"
+    environment:
+      GITHUB_OWNER: ${GITHUB_OWNER:?Set the personal account owner}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?Set the GitHub App ID}
+      GITHUB_INSTALLATION_ID: ${GITHUB_INSTALLATION_ID:?Set the personal installation ID}
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app.pem
+      GITHUB_TIMEOUT_SECONDS: ${GITHUB_TIMEOUT_SECONDS:-15}
+      GITHUB_RESPONSE_BYTES: ${GITHUB_RESPONSE_BYTES:-2097152}
+      GITHUB_MAX_PAGES: ${GITHUB_MAX_PAGES:-100}
+      GITHUB_INVENTORY_ENTRIES: ${GITHUB_INVENTORY_ENTRIES:-2000}
+      GITHUB_TREE_REQUESTS: ${GITHUB_TREE_REQUESTS:-64}
+      GITHUB_MAX_FILES: ${GITHUB_MAX_FILES:-40}
+      GITHUB_FILE_BYTES: ${GITHUB_FILE_BYTES:-65536}
+      GITHUB_CONTEXT_BYTES: ${GITHUB_CONTEXT_BYTES:-262144}
+    volumes:
+      - type: bind
+        source: ${GITHUB_APP_PRIVATE_KEY_HOST_PATH:?Set the absolute host private-key path}
+        target: /run/secrets/github-app.pem
+        read_only: true
+        bind:
+          create_host_path: false

@@ -1,5 +1,149 @@
 # Personal Dot implementation baseline
 
+## Bounded GitHub discovery and inspection — 2026-10-29
+
+**Implemented and deployed at schema `0010`. Live read-only installation
+verification succeeded. Both real schedules remain disabled. No paid model,
+real notification, repository-content inspection, branch, commit publication,
+PR or merge occurred.** Source is the current working tree based on `a7e9366`;
+no new commit or push was made in this milestone. Earlier statements that GitHub
+inspection is unavailable are superseded here; publishing remains unavailable.
+
+### Implemented boundary
+
+Two manual task types reuse `POST /tasks`, RQ execution, UUID ownership fencing,
+recovery, safe diagnostics and PostgreSQL results: `github_discover` and
+`github_inspect`. No new interface framework, repository allowlist or persistence
+layer. Migration `0010` only extends `ck_tasks_type`; GitHub tasks are prohibited
+from schedules and notifications. Added `PyJWT[crypto]` for the concrete RS256
+GitHub App authentication requirement, using existing HTTPX for transport.
+
+Discovery paginates installation repositories, filters by configured personal
+owner login and verified account ID, and reports eligibility, fork/archive/
+disabled/empty-candidate/unsupported classifications, access coverage and bounded
+pagination continuation. All accessible personally owned repositories are
+selectable; forks remain eligible when otherwise supported. Archived repositories
+are inspectable but ineligible for maintenance. Empty repositories are confirmed
+at commit lookup; inaccessible selections persist fixed failure classifications.
+Unseen private repositories outside the installation grant cannot be enumerated.
+
+Inspection accepts one repository name under the configured owner and holds a
+PostgreSQL advisory lock across collection. It resolves the default branch once,
+then reads immutable commit/tree/blob SHAs. Bounded inventories and selected
+UTF-8 text record repository identity, commit, paths, Git blob hashes, SHA-256,
+limits and explicit exclusions. Blob size and identity are verified. Default
+limits: 2,000 entries, 64 tree requests, 40 downloaded blobs (including rejected
+contents), 64 KiB/file and 256 KiB selected-files JSON context. README/docs/
+manifests precede source. Unsafe paths, symlinks/submodules, credential paths,
+agent-instruction files, executable modes, unsupported/binary/generated/vendor
+content and detected secrets are excluded. No checkout, script, hook, build,
+repository instruction, model, memory write or publishing path runs.
+
+### Configured and verified GitHub authentication
+
+[Exact setup, API requests, bounds and limitations](github-inspection.md) are
+recorded in the new operations guide. The existing ignored `.env` now uses
+`COMPOSE_FILE=compose.yaml:compose.github.yaml`, owner `zkralec`, App ID `5519145`
+and installation `176370838`, preserving prior database/provider settings.
+
+The supplied original key at
+`/home/zkralec/.config/personal-dot/secrets/github-app.pem` exists, is a valid
+unencrypted RSA PEM of at least 2048 bits and remains unchanged, owner UID/GID
+`1000:1000`, mode `0600`, secrets directory `0700`. The previous worker UID `999`
+could not read this owner-only file. The optional Compose override runs worker
+as non-root `1000:1000` and mounts only this file read-only at
+`/run/secrets/github-app.pem`; API/scheduler/migrate/test receive no key mount.
+The **actual deployed worker** validated ownership, readability and RSA parsing.
+No permission widening, credential replacement or rotation was performed.
+
+Signed App JWTs verify installation/app identity, personal User ownership,
+suspension and Contents permission before minting short-lived installation
+tokens. Requested token permissions are only contents/metadata read; inspection
+tokens are also repository-scoped. Tokens stay in memory and are refreshed before
+expiry. Fixed-origin HTTPS rejects redirects, untrusted pagination URLs,
+unbounded responses and raw provider diagnostics. Credentials never enter task
+inputs/results, URLs, logs or model context. The supplied commit-author identity
+is documented for future use; this read-only milestone does not configure it.
+
+Live task `5f5cf357-048d-4239-ac33-ba8acb4ef2d0` completed through the deployed API
+and normal worker. GitHub accepted the supplied key for App `5519145` and confirmed
+installation `176370838` belongs to personal User `zkralec`, account ID
+`157630586`, with `repository_selection=all`. One-page discovery completed with
+**22 accessible personally owned repositories, all 22 currently eligible**.
+Repository names/private metadata remain in PostgreSQL and protected operator
+evidence, not this status document. No live file selection/content download was
+needed for the authorized listing verification.
+
+### Verification and deployment evidence
+
+The final reviewed application image passed **226 tests, 1 skipped** in 29.07
+seconds. This includes 63 new GitHub fixture/process cases: RSA/JWT signatures,
+read-only scopes and expiry refresh, installation mismatch/permissions, key
+failures, HTTP/transport/rate/redirect errors, pagination and owner filtering,
+classification, immutable hashes, bounds/truncation, unsafe paths, credentials,
+binary/generated/vendor content, persistence, duplicate delivery, advisory-lock
+overlap and secret-safe API/DB/RQ/log diagnostics. Real HTTP plus forked RQ
+processes completed fixture discovery and inspection with an ephemeral test key
+and MockTransport. The existing execution-reliability, manual recovery,
+agent/check-in/evaluation/notification/tool/memory/diagnostic suites also passed.
+The paid integration was skipped; five existing RQ deprecation warnings remain.
+No schedule-enabling tests were selected, including in isolation.
+
+Used fresh internal-network project `pd-eval-github-20261029`, no published
+ports, tmpfs PostgreSQL/Redis, blank provider credentials and paid gates off.
+Inspected service/process evidence and removed only its disposable resources.
+No live credentials were mounted into tests.
+
+Followed the existing maintenance procedure: idle/target preflight, build all
+application images, stop application processes, recheck quiet controls, protected
+backup, fresh network-isolated tmpfs restore pinned to the running PostgreSQL
+image, compare all counts/data fingerprints/columns/indexes/validated constraints,
+rehearse `0009 -> 0010`, verify only the expected task-type constraint changed,
+then upgrade the real database and recreate only application services. Existing
+varchar-array/text-array constraint rendering is narrowly normalized for restore
+comparison. Original records fingerprint identically after upgrade and startup.
+
+Protected archive/checksum, original local configuration, restore/rehearsal/schema
+and data fingerprints, source hashes, container/image/mount identities, test and
+live-discovery results, logs and operator helpers (directory `0700`, files `0600`):
+
+```text
+/home/zkralec/.local/share/personal-dot/backups/github-20261029T012137Z/
+```
+
+Backup is local, not encrypted/off-host; restore excludes ownership/ACL application
+and cluster-global roles, so it is not full disaster recovery. API image prefix
+`0b5b4b6699f0`, worker `e0297041a76f`, scheduler `0156af687355`; all installed Python
+sources match the working tree. PostgreSQL/Redis containers/images/volumes are
+unchanged. `alembic current`: `0010 (head)`; schema check has no new operations;
+`pip check` is clean; `/health` reports PostgreSQL/Redis OK. Six deployed service
+logs show exactly the expected discovery task start/success and safe HTTP request
+events, with no errors, model starts, notifications or schedule materializations.
+API remains loopback-only.
+
+Eight terminal tasks now include exactly the authorized discovery. All fields of
+all seven original tasks and all other pre-existing tables are preserved. Both
+schedules remain disabled; queues/claims/outbox are idle and other application
+tables remain empty. Unrelated pre-existing documentation edits are preserved.
+
+### Remaining limitations
+
+Ready for an explicitly selected repository inspection through the documented
+API. Live authentication/listing is verified; live repository-content collection
+has not been exercised. Pagination, malformed data and snapshot safety are proven
+with authored fixtures, not every real repository format. Inventory is bounded,
+not exhaustive; non-ASCII/unsupported paths and giant responses may be excluded
+or fail safely. Secret detection is heuristic and can miss unlabelled secrets or
+exclude harmless examples: retained private source text still requires protection.
+GitHub pagination is not an account-wide transaction, and access can change.
+
+No publishing, independent-review orchestration, deterministic change-policy
+checks, commits/PRs/merges or recurrence were implemented. Generic execution
+remains at least once; recovery can resolve a newer head before a final snapshot
+commits. Advisory locking/fencing do not cancel remote requests or provide an
+append-only attempt ledger, authentication, host-crash proof or exactly-once
+execution. Stop after this read-only milestone.
+
 ## Execution reliability and documentation policy — 2026-10-29
 
 **Implemented, tested, and deployed at schema `0009`. Both real schedules remain
