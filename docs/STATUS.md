@@ -1,5 +1,153 @@
 # Personal Dot implementation baseline
 
+## Bounded documentation editor and independent reviewer — 2026-10-29
+
+**Implemented, synthetically verified and deployed at schema `0011`. Live GitHub
+file retrieval is now verified. No paid editor/reviewer call or candidate
+publication occurred; both real schedules and paid preview gates remain off.**
+This supersedes the earlier unexercised-inspection and unavailable-preview
+statements below. Model quality and live preview behavior remain unmeasured.
+
+### Checkpoint and required live inspection first
+
+Saved the previous GitHub implementation as local checkpoint `b6d46db`, preserving
+older unrelated documentation edits. No push preceded the live check. Submitted
+`github_inspect` for `personal-dot` through the existing `POST /tasks` interface:
+task `6d3702e5-c12e-47bf-9725-78a14731016f` succeeded at immutable commit
+`a7e9366afcbde3c18ef602548b59ef680cbc1953`, root tree
+`ee0831ee2a16a8ecdf69959cd52a7aa7e2c964d2`. It downloaded 40 bounded blobs and
+selected 38 text files, totaling 250,358 selected-context bytes under 262,144.
+Inventory completed; file-count, file-size, total-context, sensitive-content,
+secret-path, agent-instruction, generated/hidden and unsupported-extension
+exclusions were recorded. This was real read-only GitHub retrieval, not a fixture.
+
+All selected text lengths, Git blob hashes and SHA-256 values checked locally.
+README (16,110 bytes), architecture (22,113) and jobs source (13,972) also matched
+`git show`/Git blob identity for that exact revision byte-for-byte; the root tree
+matched the commit object. No scripts/hooks/builds or repository instructions
+were executed. No concrete inspection blocker needed repair; authentication,
+discovery and inspection implementation were reused unchanged.
+
+### Preview task, policy and persisted review
+
+New manual `documentation_preview` uses existing task/result, RQ, PostgreSQL and
+execution UUID conventions. Migration `0011` adds only its task-type constraint
+value, with no dependency, table or publisher. It accepts a completed inspection
+ID/base commit, explicit target paths/full-file hashes and evidence paths/hashes/
+line ranges, a reviewed-input sharing acknowledgment, and a per-call byte/token
+budget. Public, maintenance-eligible snapshots of the configured personal owner
+are the initial supported sharing boundary; private inspection remains available.
+
+Policy `documentation-preview-v1` allows explanatory insertions into selected
+existing README/docs Markdown only, at most three files and 300 added lines,
+configurable downward. Existing bytes/headings remain unchanged. Protected
+instructions/security/authorization/policy, code/configuration/dependencies,
+workflows, deployment/operations files/sections and executable-document content
+are denied. New commands, code blocks, links/HTML, headings, configuration and
+successful-check/maturity/authority claims fail deterministic checks. Every
+insertion needs existing selected evidence IDs and exact support quotes. Those
+checks establish identity and quote presence, not semantic truth.
+
+Input selection, public-only sharing, explicit acknowledgment, path/mode/hash
+validation and byte/line caps are mandatory in addition to secret screening.
+Secrets/control characters are screened after model JSON decoding as well as in
+raw output. No implicit files/memories, scripts, instructions or generated
+commands execute. Models receive no credentials, tools or publishing access.
+
+Exactly one editor pass identifies a concrete gap and proposes a candidate. A
+separate service instance invokes one reviewer with fresh instructions, original
+selected targets/evidence and the exact generated diff, without editor rationale,
+conversation or continuation state. There is no correction loop. Model approval
+cannot override application policy. Review binds repository, base commit,
+selected input/evidence identity, candidate/diff hash, policy/implementation,
+SDK/model configuration and outcome. Final task commit rechecks those identities
+and deterministic policy under task/source locks; any relevant drift invalidates
+approval. `approved_candidate` remains a preview outcome, never publishing permission.
+
+Fenced checkpoints retain call intent and editor candidate/validation/usage before
+review. Results retain gap, candidate, exact diff, evidence references, checks,
+review decision/findings, requested and returned model/configuration identities,
+prompt/input/output hashes, request/response IDs and available per-call usage.
+Semantic outcomes (`approved_candidate`, `changes_requested`, `no_useful_change`,
+`insufficient_evidence`, `invalid_candidate`) are separate from infrastructure
+status. Provider/configuration failures retain safe partial results with
+`outcome=null`. Timeout/stale interruption becomes terminal `uncertain` without
+automatic model re-execution; obsolete workers cannot checkpoint or complete it.
+
+Paid generation requires both the default-off operator gate and explicit boolean
+per-task permission/budget. Models use `store=false`, no tools, zero SDK retries,
+at most two calls, at most 60 seconds each, and the smaller configured/requested/
+global output cap (default 2,048 per call). Calls are byte/token bounded; this is
+not a guaranteed USD spending cap. Actual usage/cost and output quality need a
+separately approved live preview.
+
+### Synthetic and deployed verification
+
+The exact final image passed **286 tests, 1 skipped** in 38.39 seconds, including
+60 new preview cases. Covered supported improvements, unsupported claims,
+malicious source instructions, forbidden paths/sections/commands, invalid IDs/
+quotes, reviewer rejection/contracts, no-op/insufficient work, limits, explicit
+sharing/permission fields, decoded secrets, candidate/source/owner/policy/outcome
+changes, partial checkpoints/usage, model timeouts, late completion and disabled
+paid gates. A real HTTP/forked-RQ process case completed both authored stub model
+passes. These fixtures prove contracts, not model quality or injection robustness.
+Existing GitHub, execution reliability, task, agent, check-in/evaluation, memory,
+tool, notification, diagnostic and manual recovery suites passed. The paid
+integration was skipped; five existing RQ deprecation warnings remain.
+
+Verification used fresh internal-network project `pd-eval-docs-20261029`, no
+published ports, tmpfs data, blank provider credentials and paid gates off. Final
+verification had no source mounts. No schedule-enabling cases were run. Its
+service/process evidence was inspected and disposable resources removed.
+
+The exact documented real snapshot selection also passed read-only preparation.
+After deployment, API task `aa11c0f9-45b1-4810-b59c-266993e0488c` accepted that request
+with paid permission false and stopped at the disabled operator gate: failed task,
+`outcome=null`, no candidate and **zero model calls**. This is live API/gate evidence,
+not live generation. Three fixed expected gate-failure log records were retained;
+no provider bodies or input contents entered logs.
+
+### Deployment, data preservation and remaining limits
+
+Followed idle/target preflight, build, application-only stop, protected backup,
+network-isolated tmpfs restore pinned to the running PostgreSQL image, complete
+count/data-fingerprint/schema comparisons, and rehearsal of `0010 -> 0011` before
+the real migration. Only the expected task-type constraint changed; idempotent
+migration and application-only recreation preserved PostgreSQL/Redis containers,
+images and volumes. The existing equivalent array-cast representation is narrowly
+normalized during restore comparison. Installed Python sources match the checkout.
+
+Protected archive/checksum, local configuration, restore/rehearsal/schema/data
+fingerprints, source/image/mount identities, logs, final tests, live inspection/
+revision checks, gate-check requests/results and operator helpers (directory
+`0700`, files `0600`) remain outside Git:
+
+```text
+/home/zkralec/.local/share/personal-dot/backups/docs-preview-20261029T022019Z/
+```
+
+Backup is local, not encrypted/off-host; ownership/ACL application and global
+roles are excluded from restore, so this is not full disaster recovery. API image
+prefix `8b4c1da95a89`, worker `5f13d153fe3f`, scheduler `2572538edc7f`. Schema is
+`0011 (head)`; `alembic check`, `pip check` and `/health` pass. The key remains
+read-only only in non-root worker UID 1000; API receives only the public owner
+setting needed to bind preview scope. Both paid gates remain false. No model,
+notification or schedule-materialization activity appears in deployed logs.
+
+Ten terminal tasks now include the authorized live inspection and disabled-gate
+preview test. All nine pre-deployment tasks and all other existing records are
+preserved. Both schedules remain disabled; active queue registries, execution
+claims and notification outbox are empty. Original unrelated edits are preserved.
+
+[Exact task requests, result commands, policy and a later opt-in input/budget
+procedure](documentation-preview.md) are documented. This first editor supports
+insertions/public snapshots only. No live editor/reviewer quality, actual usage/
+cost, exhaustive secret detection or independent model-error behavior is verified.
+Same-model review can share errors; valid references are not factual proof.
+Private previews, general document rewriting, branch/head freshness enforcement
+for publishing, publishing itself, general attempt history, authentication and
+host-crash/exactly-once guarantees remain outside scope. No candidate patch was
+applied or published, no PR/merge was created, and no schedule was enabled.
 ## Bounded GitHub discovery and inspection — 2026-10-29
 
 **Implemented and deployed at schema `0010`. Live read-only installation

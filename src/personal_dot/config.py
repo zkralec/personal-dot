@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     github_max_files: int = Field(default=40, ge=1, le=100)
     github_file_bytes: int = Field(default=65_536, ge=1, le=262_144)
     github_context_bytes: int = Field(default=262_144, ge=2, le=1_048_576)
+    docs_preview_live_enabled: bool = False
+    docs_preview_editor_model: str = ""
+    docs_preview_reviewer_model: str = ""
+    docs_preview_output_tokens: int = Field(default=2048, ge=128, le=4096)
+    docs_preview_max_files: int = Field(default=3, ge=1, le=3)
+    docs_preview_max_changed_lines: int = Field(default=300, ge=1, le=300)
     agent_max_tool_rounds: int = Field(default=8, ge=1, le=32)
 
 

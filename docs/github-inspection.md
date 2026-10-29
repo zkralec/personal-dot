@@ -186,7 +186,9 @@ response bodies, headers, token values and exception chains are not diagnostics.
 Failed tasks remain PostgreSQL records. Inspect the fixed task error/code and
 GitHub App settings; do not automatically rotate credentials or expand access.
 
-Publishing, deterministic change-policy enforcement, independent review,
-commit/PR/merge automation and schedules remain future milestones. No live model
+[Bounded documentation preview](documentation-preview.md) now implements an
+initial insertion policy and independent reviewer context over selected public
+snapshots. Publishing, full change-policy enforcement, commit/PR/merge automation
+and schedules remain future milestones. No live model
 quality, exhaustive secret detection, host-crash recovery or exactly-once
 execution is established by repository snapshots.

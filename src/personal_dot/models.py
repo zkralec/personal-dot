@@ -30,6 +30,7 @@ class TaskType(str, enum.Enum):
     PROJECT_CHECK_IN = "project_check_in"
     GITHUB_DISCOVER = "github_discover"
     GITHUB_INSPECT = "github_inspect"
+    DOCUMENTATION_PREVIEW = "documentation_preview"
 
 
 class TaskStatus(str, enum.Enum):
@@ -224,7 +225,7 @@ class Schedule(Base):
 class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
-        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in', 'github_discover', 'github_inspect')", name="ck_tasks_type"),
+        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in', 'github_discover', 'github_inspect', 'documentation_preview')", name="ck_tasks_type"),
         CheckConstraint(
             "status IN "
             "('queued', 'running', 'waiting_for_approval', 'succeeded', 'failed', 'uncertain')",

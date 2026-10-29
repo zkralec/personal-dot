@@ -412,3 +412,18 @@ PostgreSQL advisory lock, resolves one default-branch commit, then collects
 bounded tree/blob evidence by immutable SHA, with hashes and explicit exclusions.
 No model, tools, checkout, script execution, notifications or publishing path is
 added. See [configuration, API and bounds](github-inspection.md).
+
+## Documentation preview
+
+Manual `documentation_preview` tasks prepare only explicitly selected immutable
+inspection files/ranges into PostgreSQL task inputs. A tool-free editor proposes
+bounded explanatory insertions; application policy builds and validates an exact
+diff. A separate reviewer receives fresh context, the exact diff and selected
+evidence. Candidate/review bindings include repository, base commit, input,
+policy, model configuration and outcome. UUID-fenced checkpoints retain stage
+intent and candidate/usage before review; the final transaction revalidates the
+source inspection and binding under locks. Semantic preview outcomes are distinct
+from infrastructure status. No automatic correction, publication or notification
+exists. Like check-ins, interrupted previews become terminal uncertain without
+model re-execution. Migration `0011` only adds the task type; no new persistence
+layer or dependency. See [policy, API and opt-in budget](documentation-preview.md).

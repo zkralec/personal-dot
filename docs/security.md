@@ -185,3 +185,20 @@ source is untrusted evidence. Retained private repository text is sensitive even
 after heuristic path/content secret exclusion. Discovery cannot expose private
 repositories outside the installation grant. GitHub tasks cannot notify or be
 scheduled and have no publishing methods.
+
+## Documentation preview boundary
+
+[Documentation previews](documentation-preview.md) require explicit reviewed
+input paths/hashes/ranges from a public immutable inspection owned by the
+configured personal account. Public-only sharing, path/mode exclusions, byte/line
+bounds and owner acknowledgment are mandatory in addition to heuristic secret
+screening. The editor/reviewer have no tools, GitHub credentials, continuation
+state or publishing access. Outputs are structured untrusted data; application
+policy controls paths, scope, hashes and the exact reviewed revision. Candidates
+are explanatory insertions only; protected policy/security/authorization,
+configuration, dependency, executable-document and deployment changes are denied.
+No reviewer decision grants permission or bypasses deterministic checks.
+Paid generation requires both the default-off operator gate and explicit per-task
+permission/budget. No live generation is authorized by this milestone. Models can
+still make semantic mistakes; no exactly-once remote execution, exhaustive secret
+detection or authenticated approver identity is claimed.

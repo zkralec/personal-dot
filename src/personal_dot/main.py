@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from personal_dot.db import get_db
 from personal_dot.diagnostics import error_class, queue_error
+from personal_dot.documentation_preview import prepare_documentation
+from personal_dot.documentation_errors import DocumentationError, MESSAGES as DOCUMENTATION_MESSAGES
 from personal_dot.check_in import CheckInInputError, prepare_check_in
 from personal_dot.models import Task, TaskStatus, TaskType
 from personal_dot.memory_routes import router as memory_router
@@ -38,8 +40,8 @@ DatabaseSession = Annotated[Session, Depends(get_db)]
 async def safe_github_validation(request: Request, exc: RequestValidationError) -> Response:
     body = exc.body if isinstance(exc.body, dict) else {}
     nested = body.get("task") if isinstance(body.get("task"), dict) else {}
-    if body.get("type") in ("github_discover", "github_inspect") or nested.get("type") in ("github_discover", "github_inspect"):
-        return JSONResponse(status_code=422, content={"detail": "invalid GitHub task request"})
+    if body.get("type") in ("github_discover", "github_inspect", "documentation_preview") or nested.get("type") in ("github_discover", "github_inspect", "documentation_preview"):
+        return JSONResponse(status_code=422, content={"detail": "invalid read or preview task request"})
     return await request_validation_exception_handler(request, exc)
 
 
@@ -90,6 +92,13 @@ def health(db: DatabaseSession) -> HealthResponse | JSONResponse:
 def create_task(request: TaskCreate, db: DatabaseSession) -> Task:
     attempted_at = datetime.now(UTC)
     payload = request.payload
+    if request.type == TaskType.DOCUMENTATION_PREVIEW:
+        try:
+            payload = prepare_documentation(payload, db)
+        except DocumentationError as exc:
+            raise HTTPException(status_code=422, detail=DOCUMENTATION_MESSAGES[exc.code]) from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="Documentation inputs unavailable") from None
     if request.type == TaskType.PROJECT_CHECK_IN:
         try:
             payload = prepare_check_in(payload, db)

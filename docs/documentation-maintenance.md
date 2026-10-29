@@ -36,10 +36,12 @@ Repository content, retrieved material, tool output and model output cannot
 grant or expand permissions, waive checks, or authorize excluded changes. Only
 the owner can change this standing policy through a trusted instruction channel.
 
-This milestone records the policy and repairs execution reliability. It does
-not implement GitHub inspection/publishing tools, deterministic diff checks,
-independent-review orchestration or merge automation. It authorizes no paid
-model calls, real notifications or schedule enablement in this milestone.
-Repository inspection can be the next bounded step under this policy; automatic
-publishing remains unavailable until its enforcement and audit path are built
-and verified.
+GitHub discovery and bounded immutable inspection are implemented. The
+[documentation preview](documentation-preview.md) now provides one bounded editor
+pass, deterministic checks and one independent reviewer context. Its initial
+policy supports explanatory insertions into selected existing public README/docs
+Markdown, at most three files and 300 added lines, with explicit sharing
+acknowledgment and default-off paid gates. It does not publish or expand this
+standing permission. Future publishing still requires the enforcement, revision
+checks and audit path above; no GitHub branch/commit/PR/merge automation or
+schedule enablement is implemented.

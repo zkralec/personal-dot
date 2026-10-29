@@ -1,6 +1,7 @@
 """Fixed failure vocabulary. Exception messages/bodies are never diagnostics."""
 
 from typing import Any
+from personal_dot.documentation_errors import DocumentationError, MESSAGES as DOCUMENTATION_MESSAGES
 
 from redis.exceptions import RedisError
 from personal_dot.github_errors import GitHubError, safe_code
@@ -8,6 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 
 def error_class(error: BaseException) -> str:
+    if isinstance(error, DocumentationError):
+        return "documentation_" + (error.code if error.code in DOCUMENTATION_MESSAGES else "input_invalid")
     if isinstance(error, GitHubError):
         return "github_" + safe_code(error)
     if isinstance(error, SQLAlchemyError):

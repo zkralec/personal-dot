@@ -13,6 +13,8 @@ from personal_dot.config import get_settings
 from personal_dot.db import SessionLocal, engine
 from personal_dot.diagnostics import agent_error_message, error_class, failure_metadata
 from personal_dot.memory_service import get_memory_service
+from personal_dot.documentation_preview import execute_documentation, seal_documentation_result
+from personal_dot.documentation_errors import DocumentationError, MESSAGES as DOCUMENTATION_MESSAGES
 from personal_dot.github import get_github_client
 from personal_dot.github_errors import GitHubError, safe_code, safe_message
 from personal_dot.repository_inspection import discover, inspect_repository
@@ -35,6 +37,9 @@ class TaskExecutionResult:
 
 
 def _perform(task: Task) -> TaskExecutionResult | AgentPaused:
+    if task.type == TaskType.DOCUMENTATION_PREVIEW:
+        result, metadata = execute_documentation(task)
+        return TaskExecutionResult(result=result, metadata=metadata)
     if task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT}:
         with engine.connect() as connection, connection.begin():
             if task.type == TaskType.GITHUB_INSPECT and not connection.scalar(text(
@@ -88,7 +93,7 @@ def _perform(task: Task) -> TaskExecutionResult | AgentPaused:
 def _notify_terminal_task(task_id: uuid.UUID) -> None:
     with SessionLocal() as session:
         task = session.get(Task, task_id)
-        if task is None or task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT} or not should_notify(task.notification_policy, task.status):
+        if task is None or task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT, TaskType.DOCUMENTATION_PREVIEW} or not should_notify(task.notification_policy, task.status):
             return
         if task.type == TaskType.PROJECT_CHECK_IN:
             deliver_notification(task_id, service_factory=get_notification_service)
@@ -289,6 +294,9 @@ def _execute_task(task_id: str) -> dict[str, Any]:
                 if isinstance(exc, AgentExecutionError)
                 else f"Task execution failed ({error_class(exc)})"
             )
+            if isinstance(exc, DocumentationError):
+                task.error = DOCUMENTATION_MESSAGES.get(exc.code, DOCUMENTATION_MESSAGES['input_invalid'])
+                task.result = exc.result
             if isinstance(exc, GitHubError):
                 task.error = safe_message(exc)
             task.agent_state = None
@@ -299,6 +307,10 @@ def _execute_task(task_id: str) -> dict[str, Any]:
                     "handler": task.type.value,
                     "success": False,
                 }
+            if isinstance(exc, DocumentationError):
+                task.execution_metadata = exc.metadata
+                if exc.metadata.get("request_outcome") == "unknown":
+                    task.status = TaskStatus.UNCERTAIN
             if isinstance(exc, GitHubError):
                 task.execution_metadata["github"] = {"error_code": safe_code(exc)}
             task.execution_metadata = {**schedule_metadata, **task.execution_metadata}
@@ -357,9 +369,13 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             return task.result or {}
         task.execution_id = None
         task.status = TaskStatus.SUCCEEDED
-        task.result = result.result
+        task.result = (seal_documentation_result(session, task, result.result)
+                       if task.type == TaskType.DOCUMENTATION_PREVIEW else result.result)
         task.execution_metadata = {**schedule_metadata, **result.metadata}
         task.execution_metadata.pop("waiting_for_approval", None)
+        if task.type == TaskType.DOCUMENTATION_PREVIEW:
+            task.execution_metadata["success"] = True
+            task.execution_metadata["documentation_preview"]["stage"] = task.result['stage']
         task.agent_state = None
         task.completed_at = datetime.now(UTC)
         ensure_notification(session, task, task.completed_at)
