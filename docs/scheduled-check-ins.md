@@ -1,5 +1,49 @@
 # Persistent project check-ins
 
+## Hardening verification — 2026-10-29
+
+Citation and diagnostic fixes are deployed at schema `0008`; application sources
+match the checkout. Both real schedules remain disabled. Synthetic verification
+passed 140 tests (one paid test skipped), all 21 corpus contracts, and a manual
+container lifecycle with stub delivery retry. No live quality is established.
+See [current evidence and limitations](STATUS.md#citation-and-diagnostic-hardening--2026-10-29).
+
+Recognized prose citations use the literal `memory:<id>`, `task:<id>`, or
+`priority:<project_id>:<position>` token, optionally wrapped in Markdown. Every
+prose field and structured citation must refer to the accepted snapshot; prose
+IDs must also be listed in supporting sources. Ordinary Markdown/brackets/code
+are not citation syntax. Namespaced IDs inside code are still checked. An ID's
+existence does not prove that a claim follows from that source; inspect source
+support during the controlled live review.
+
+Expected validation failure: task `failed`, null result, fixed invalid-result
+error, retained usage/request IDs, and no on-completion notification. Generic
+failures use fixed classifications (`database_error`, `queue_unavailable`,
+`timeout`, `unexpected_error`); queue failures remain queued for durable retry.
+Operational logs and RQ failures omit raw exception bodies and chains. Correlate
+task/schedule/request/response IDs, timestamps, health and queue state; do not
+turn on payload/provider/SQL debug logging to recover withheld error text.
+Unexpected API failures return a fixed HTTP 503. If the terminal database write
+fails, the task may remain running until stale reconciliation. This deployment
+does not repair delayed generic approval resume or stale waiting metadata.
+
+For future synthetic verification, use a fresh isolated manifest with
+`--stub-check-in-providers`, then run the existing container smoke harness
+without creating or enabling any schedule:
+
+```bash
+docker compose -p pd-eval-YOUR-FRESH-NAME -f /tmp/YOUR-ISOLATED-MANIFEST.json \
+  exec -T api python -m tests.scheduled_lifecycle_smoke --manual-only
+```
+
+The manifest must have blank credentials, paid gates off, an internal network,
+no published ports, and fresh disposable data. The smoke harness checks the stub
+gate/empty database, submits only a synthetic manual task and advances only its
+isolated delivery retry deadline. Do not invoke its default scheduling path when
+recurrence is outside authorization. Never run destructive test fixtures against
+the normal database. Keep the live runbook's selected-input, budget and single
+attempt controls; this milestone authorizes no live submission or notification.
+
 The existing dedicated `personal_dot.scheduler` process materializes check-ins
 from PostgreSQL schedules. No live schedule is installed or enabled by this
 milestone. Creating a check-in schedule defaults to `enabled=false`; explicitly

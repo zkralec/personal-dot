@@ -63,6 +63,7 @@ src/personal_dot/
   check_in.py            bounded input snapshots and tool-free generation
   check_in_schemas.py    check-in request, snapshot, and validated result contracts
   db.py                  SQLAlchemy engine/session/base
+  diagnostics.py         fixed failure vocabulary and diagnostic field allowlist
   jobs.py                worker entry points and state transitions
   main.py                FastAPI application and routes
   memory_routes.py       memory CRUD, filtering, disable, and deletion API
@@ -174,7 +175,10 @@ The worker uses `AgentService.execute` directly, with one model request, no tool
 definitions, no SDK retries, and capped request/output budgets. Local validation
 requires a versioned summary, sourced blockers, one sourced advisory action (or
 an explicit insufficient-information outcome), supporting IDs, and uncertainty.
-Unknown citations, unsupported action kinds, invalid JSON, excess output, or an
+Structured IDs and namespaced citations in summary, blockers, action description
+and rationale, and uncertainty are checked against the snapshot. Prose IDs must
+also be listed in supporting IDs. Unknown citations, unsupported action kinds,
+invalid JSON, excess output, or an
 unexpected tool call fail safely. Current-note and priority references constrain
 provenance; they do not establish semantic truth. Generated results are never
 promoted to persistent memories.

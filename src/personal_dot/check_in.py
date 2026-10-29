@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -25,6 +26,19 @@ MODEL_METADATA_KEYS = frozenset({
     "model_completed_at", "response_id", "request_id", "response_status", "usage",
     "request_outcome",
 })
+# Explicit namespaced IDs, not generic brackets, Markdown links or code syntax.
+# Wrapping an ID in Markdown/code does not exempt it from validation.
+SOURCE_REFERENCE = re.compile(
+    r"\b(?:memory|task):[A-Za-z0-9_-]+|\bpriority:[a-z0-9_-]+:[0-9]+"
+)
+
+
+def text_source_ids(result: CheckInResult) -> set[str]:
+    prose = [result.summary, *result.uncertainty]
+    prose.extend(blocker.text for blocker in result.blockers)
+    if result.recommended_action:
+        prose.extend([result.recommended_action.description, result.recommended_action.rationale])
+    return set(SOURCE_REFERENCE.findall("\n".join(prose)))
 
 
 class CheckInInputError(ValueError):
@@ -139,6 +153,10 @@ def _validate_sources(result: CheckInResult, prepared: PreparedCheckIn) -> None:
         allowed.add(prepared.previous_result.source_id)
     if not set(result.supporting_source_ids) <= allowed:
         raise ValueError("unknown source")
+    if not text_source_ids(result) <= allowed:
+        raise ValueError("unknown prose source")
+    if not text_source_ids(result) <= set(result.supporting_source_ids):
+        raise ValueError("prose sources must be listed in supporting_source_ids")
     if not set(result.supporting_source_ids) & note_ids:
         raise ValueError("current project-note evidence required")
     evidence_groups = [blocker.source_ids for blocker in result.blockers]
@@ -231,6 +249,8 @@ def build_check_in_instruction() -> str:
         "return exactly one recommended_action. Cite a current note for every blocker; "
         "the action must cite a current note and at least one supplied priority. Use only "
         "the supplied source_id values; list every cited ID in supporting_source_ids. "
+        "In prose, citations use the literal memory:<id>, task:<id>, or "
+        "priority:<project_id>:<position> source ID, optionally wrapped in Markdown. "
         "Action kinds are advisory: advance_priority, resolve_blocker, clarify_context. "
         "Do not treat an unchanged source or an edited timestamp as proof of progress. "
         "Schema:\n" + _json(CheckInResult.model_json_schema())

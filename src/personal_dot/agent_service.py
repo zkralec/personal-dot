@@ -207,7 +207,7 @@ class AgentService:
                 }
             )
             raise AgentExecutionError(
-                f"OpenAI API request failed with status {exc.status_code}", metadata
+                "OpenAI API request rejected", metadata
             ) from None
         except APITimeoutError:
             metadata.update(
@@ -254,7 +254,7 @@ class AgentService:
 
         if response_status != "completed":
             raise AgentExecutionError(
-                f"OpenAI response ended with status '{response_status}'", metadata
+                "OpenAI response did not complete", metadata
             )
 
         try:

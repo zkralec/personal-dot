@@ -18,6 +18,7 @@ from personal_dot.agent_service import (
     get_agent_service,
 )
 from personal_dot.config import get_settings
+from personal_dot.diagnostics import error_class
 from personal_dot.db import SessionLocal
 from personal_dot.models import (
     ApprovalRequest,
@@ -44,12 +45,11 @@ class AgentPaused:
 
 
 def _safe_validation_error(exc: ValidationError) -> str:
-    errors = exc.errors(include_url=False, include_context=False, include_input=False)
-    return f"invalid tool arguments: {errors}"
+    return "invalid tool arguments: schema validation failed"
 
 
 def _safe_error(exc: Exception) -> str:
-    return f"{type(exc).__name__}: tool execution failed"
+    return f"Tool execution failed ({error_class(exc)})"
 
 
 def _function_output(call_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -421,7 +421,7 @@ class AgentRuntime:
 
         metadata.update({"success": False, "tool_rounds": rounds})
         raise AgentExecutionError(
-            f"agent exceeded the {self.max_tool_rounds} tool-round limit",
+            "Agent tool-round limit exceeded",
             metadata,
         )
 

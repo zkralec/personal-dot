@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from personal_dot.diagnostics import error_class
 
 
 class HealthAccessFilter(logging.Filter):
@@ -45,12 +46,15 @@ class JsonFormatter(logging.Formatter):
             "provider",
             "provider_request_id",
             "notification_status",
+            "error_class",
         ):
             value = getattr(record, key, None)
             if value is not None:
                 message[key] = value
         if record.exc_info:
-            message["exception"] = self.formatException(record.exc_info)
+            # Defense in depth for dependency tracebacks; never render bodies,
+            # SQL statements, parameters, chained exceptions, or local values.
+            message["error_class"] = error_class(record.exc_info[1])
         return json.dumps(message, default=str)
 
 

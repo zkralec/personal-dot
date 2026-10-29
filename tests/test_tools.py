@@ -251,7 +251,7 @@ async def test_approval_enqueue_failure_is_reconciled_without_reapproval(
     assert approved.json()["status"] == "approved"
     task = (await client.get(f"/tasks/{task_id}")).json()
     assert task["status"] == "queued"
-    assert task["enqueue_error"] == "ConnectionError: queue delivery failed"
+    assert task["enqueue_error"] == "Queue delivery failed (queue_unavailable); durable reconciliation will retry"
 
     enqueued: list[str] = []
     scheduler = SchedulerService(

@@ -186,7 +186,7 @@ async def test_scheduler_restart_recovers_persisted_unqueued_task(client) -> Non
     assert first_stats.errors == 1
     first_task = (await client.get(f"/schedules/{schedule_id}/tasks")).json()[0]
     assert first_task["status"] == "queued"
-    assert "simulated Redis outage" in first_task["enqueue_error"]
+    assert first_task["enqueue_error"] == "Queue delivery failed (queue_unavailable); durable reconciliation will retry"
 
     recovered_ids: list[str] = []
     restarted = scheduler_with(recovered_ids, requeue_after_seconds=60)

@@ -158,5 +158,5 @@ async def test_notification_test_endpoint_reports_missing_configuration(
 
     assert response.status_code == 503
     assert response.json() == {
-        "detail": "PUSHOVER_API_TOKEN is not configured"
+        "detail": "notification provider is not configured"
     }

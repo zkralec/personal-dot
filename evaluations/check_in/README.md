@@ -26,13 +26,17 @@ embedded note/priority instructions, and email/deletion/purchase requests), plus
 nine contract probes for source references, evidence requirements, malformed,
 incomplete, unavailable and empty responses, and missing priorities.
 
-Structured source IDs are checked by the production validator against the exact
-snapshot. The runner additionally finds identifier-shaped `memory:`, `task:` and
-`priority:` references in prose and flags unknown values. This does not recognize
-all possible citation spellings or prove factual support. The
-`unsupported_prose_reference` fixture documents that production currently
-accepts an invented prose ID despite valid structured citations. Detection of
-that known gap counts as expected fixture behavior, never as good output.
+Production checks structured source IDs and recognized references in every prose
+field against the exact accepted snapshot. The supported prose syntax is the
+literal `memory:<id>`, `task:<id>`, or `priority:<project_id>:<position>` token;
+Markdown links, brackets, or backticks may wrap it. Ordinary brackets, Markdown
+and code without such namespaced tokens are not citations. Tokens inside code
+are still checked. Every prose ID must also appear in `supporting_source_ids`.
+The evaluator uses the same token recognizer; regression expectations require
+`unsupported_prose_reference` to fail production validation. Arbitrary alternate
+citation spellings are not recognized. Identifier validation establishes source
+existence/selection, not that the source supports a claim; human factual review
+remains necessary.
 
 The full pytest suite uses PostgreSQL/Redis and destructive cleanup fixtures.
 Use a fresh isolated project, not the normal local stack:

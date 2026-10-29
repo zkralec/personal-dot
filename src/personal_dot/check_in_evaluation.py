@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 import platform
-import re
 import uuid
 from datetime import UTC, datetime
 from importlib.metadata import version
@@ -27,9 +26,6 @@ from personal_dot.check_in_schemas import (
 from personal_dot.models import Task, TaskType
 
 DEFAULT_CASES = Path("evaluations/check_in/cases.json")
-SOURCE_REFERENCE = re.compile(
-    r"\b(?:memory|task):[A-Za-z0-9_-]+|\bpriority:[a-z0-9_-]+:[0-9]+"
-)
 
 
 class EvaluationCase(BaseModel):
@@ -117,12 +113,7 @@ def unlisted_text_source_ids(result: dict[str, Any], prepared: PreparedCheckIn) 
                    for i in range(1, len(prepared.priorities) + 1))
     if prepared.previous_result:
         allowed.add(prepared.previous_result.source_id)
-    prose = [result["summary"], *result["uncertainty"]]
-    prose.extend(blocker["text"] for blocker in result["blockers"])
-    if result["recommended_action"]:
-        action = result["recommended_action"]
-        prose.extend([action["description"], action["rationale"]])
-    return sorted(set(SOURCE_REFERENCE.findall("\n".join(prose))) - allowed)
+    return sorted(check_in.text_source_ids(CheckInResult.model_validate(result)) - allowed)
 
 
 class SyntheticResponses:

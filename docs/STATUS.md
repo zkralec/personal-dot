@@ -1,5 +1,123 @@
 # Personal Dot implementation baseline
 
+## Citation and diagnostic hardening — 2026-10-29
+
+**Implemented, tested, and deployed. Both real schedules remain disabled. No live
+model call, external notification, or private-note selection occurred.** This
+section supersedes older citation/diagnostic findings below. The delayed generic
+approval-resume defect and stale waiting metadata remain open and unchanged.
+
+### Defects reproduced and changes
+
+Ran four new regression probes against the previously deployed application image
+in fresh isolated PostgreSQL/Redis: all four failed, reproducing unknown prose
+citation acceptance, arbitrary unexpected-task error disclosure, queue error
+logging/reconciliation disclosure, and typed notification error disclosure.
+
+Production now validates explicit `memory:<id>`, `task:<id>`, and
+`priority:<project_id>:<position>` references in summary, blocker text, action
+description/rationale, and every uncertainty item. Only source IDs from the
+accepted input snapshot are allowed; prose IDs must also be in
+`supporting_source_ids`. Markdown wrappers do not bypass validation; ordinary
+brackets, Markdown and code without namespaced source tokens are unaffected.
+The former known-gap corpus case now requires rejection. Evaluation and
+production share the recognizer; independent test expectations cover every text
+field, three namespaces, wrappers, prior-result selection and ordinary syntax.
+Invalid output cannot commit a successful result or dispatch an on-completion
+notification; usage and request/response identities survive safe rejection.
+Source existence/selection does **not** prove factual support for a claim.
+
+Unexpected task failures, manual/approval enqueue and scheduler reconciliation
+use fixed classifications/messages instead of arbitrary exception text or class
+names. Agent failure metadata has an explicit field allowlist and numeric usage
+fields. API and RQ boundaries catch escaped provider/database/commit errors;
+service logs omit exception bodies/chains. Notification API/audits and tool
+failure diagnostics use fixed messages. SQLAlchemy parameter hiding remains a
+secondary measure. Correlation task/schedule/request/response IDs and operational
+events remain available; no schema change, dependency, or approval redesign.
+
+### Verification
+
+The final rebuilt API image, also used for isolated verification, passed
+**140 tests, 1 skipped** in 10.96 seconds. The skipped test is the paid OpenAI
+integration. Selected suites: health, tasks, agent adapter, notifications, tools,
+memories, check-ins, evaluation, diagnostic regressions and the manual HTTP/
+forked-RQ process case. Tests that enable schedules were deliberately omitted,
+including the scheduled process parameterization. New scheduler diagnostics
+coverage uses queued manual work and a disabled synthetic schedule with an
+injected materialization error; no schedule was enabled, even in isolation.
+Five RQ `job.exc_info` deprecation warnings do not affect these assertions.
+
+Unmistakable synthetic sensitive markers in unexpected/typed agent exceptions,
+SQL statements/parameters/server errors, provider exceptions and transport chains
+were absent from API responses, persisted errors/audits, RQ failures, applicable
+logs and notification content. Commit-failure tests verify safe RQ diagnostics
+when the terminal transaction itself cannot persist. All 21 corpus expectations
+passed; the compact baseline was regenerated with source/prompt/corpus hashes.
+These authored fixtures establish contracts, not real model quality.
+
+Reused `isolated_compose.py --stub-check-in-providers` with fresh project
+`pd-eval-harden-20261029`: internal network, no published ports, tmpfs data,
+blank provider credentials and both live gates off. The existing container smoke
+harness now supports `--manual-only`; that path created no schedules and passed
+through the HTTP API, worker and scheduler with exactly one stub model request,
+initial stub notification failure and a successful independent second attempt.
+The persisted result stayed identical. Inspected all six isolated service logs.
+Temporary isolated containers/network were removed after verification.
+
+### Deployment and data preservation
+
+Used the existing maintenance procedure: verify matching effective database/
+Redis/queue targets and an idle window; build API/worker/scheduler/migrate;
+stop application processes; recheck quiet controls; make a protected backup;
+restore into a fresh network-isolated tmpfs PostgreSQL container pinned to the
+running database image; compare all table counts/ordered row-data fingerprints;
+rehearse `upgrade head`; run the normal idempotent migration job; recreate only
+application services. No database/Redis recreation, volume removal, downgrade,
+schedule enable, real task creation or provider request occurred.
+
+Protected backup/evidence directory (`0700`, files `0600`, outside Git):
+
+```text
+/home/zkralec/.local/share/personal-dot/backups/harden-20261029T001637Z/
+```
+
+It contains the custom-format archive/checksum, original/restored/rehearsed/after
+fingerprints, source hashes, container/image/volume identities and inspected logs.
+Restoration excludes ownership/ACL application and cluster-global roles; this is
+not full disaster recovery. The backup is local, not encrypted/off-host.
+
+API image prefix `45991bfc1801`, worker `2f15215aec1b`, scheduler
+`5379c83fa2a7`. Installed Python sources in all three match the checkout exactly.
+PostgreSQL/Redis container/image/volume identities are unchanged. Schema remains
+`0008 (head)`; isolated and deployed `alembic check` report no new operations,
+`pip check` reports no broken requirements, and `/health` reports PostgreSQL/
+Redis OK. All six deployed logs contain no tracebacks/errors, model starts,
+notification attempts or schedule materializations during maintenance.
+
+All table fingerprints are unchanged: seven terminal tasks, two disabled
+schedules, no memories/notes/tool calls/approvals/outbox rows. RQ queued/started/
+deferred/scheduled counts and pending deliveries are zero. API remains loopback
+only. No application migration was added or applied beyond idempotent head.
+
+### Readiness and remaining limits
+
+DOT is technically ready for **one separately authorized controlled live
+check-in** using the existing maintenance runbook, explicit project-note IDs,
+priorities and an approved budget. No live quality, provider compatibility,
+actual usage/cost, phone receipt or duplicate behavior has been established.
+The process-local one-push-attempt live procedure remains unverified. Both real
+schedules remain disabled; recurrence requires separate authorization.
+
+Citation checks validate recognized identifiers, not semantic support or every
+possible alternate citation spelling. Error sanitization is prospective; old
+records/logs were not rewritten. If a terminal database transaction fails, safe
+RQ diagnostics survive but the task can remain running until stale reconciliation
+marks a check-in uncertain or recovers generic work. General attempt history,
+authentication, least-privilege DB roles, generic notification outbox, host/crash
+recovery guarantees, prior-result freshness policy and the approval-resume
+findings remain outside this milestone.
+
 ## Controlled live verification preflight — 2026-10-23
 
 **Blocked before submission; no model request, Pushover attempt, or task creation.**

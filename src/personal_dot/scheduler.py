@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 
 from personal_dot.config import Settings, get_settings
 from personal_dot.db import SessionLocal
+from personal_dot.diagnostics import error_class, queue_error
 from personal_dot.check_in import prepare_check_in
 from personal_dot.models import Schedule, Task, TaskStatus, TaskType
 from personal_dot.notification_delivery import ensure_notification, deliver_pending_notifications
@@ -67,6 +68,7 @@ class SchedulerService:
                         extra={
                             "event": "schedule_failed",
                             "schedule_id": str(schedule_id),
+                            "error_class": error_class(exc),
                         },
                     )
                     break
@@ -275,9 +277,10 @@ class SchedulerService:
             except Exception as exc:
                 errors += 1
                 self._record_enqueue_error(task_id, exc)
-                logger.exception(
+                logger.error(
                     "Task enqueue retry failed",
-                    extra={"event": "task_enqueue_retry_failed", "task_id": str(task_id)},
+                    extra={"event": "task_enqueue_retry_failed", "task_id": str(task_id),
+                           "error_class": error_class(exc)},
                 )
                 continue
             enqueued += 1
@@ -310,7 +313,7 @@ class SchedulerService:
             return True
 
     def _record_enqueue_error(self, task_id: uuid.UUID, error: Exception) -> None:
-        safe_error = f"{type(error).__name__}: {error}"[:2000]
+        safe_error = queue_error(error)
         with self.session_factory() as session, session.begin():
             task = session.get(Task, task_id)
             if task is not None and task.status == TaskStatus.QUEUED:
@@ -349,10 +352,10 @@ def main() -> None:
                         "notifications_attempted": stats.notifications_attempted,
                     },
                 )
-        except Exception:
-            logger.exception(
+        except Exception as exc:
+            logger.error(
                 "Scheduler poll failed",
-                extra={"event": "scheduler_poll_failed"},
+                extra={"event": "scheduler_poll_failed", "error_class": error_class(exc)},
             )
         elapsed = time.monotonic() - started
         time.sleep(max(0.1, settings.scheduler_poll_seconds - elapsed))

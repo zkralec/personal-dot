@@ -115,8 +115,9 @@ are untrusted JSON context. Inputs cannot register tools, load files, grant
 permission, execute recommendations, or cause memory writes. The check-in bypasses
 the tool runtime; unexpected provider function calls fail closed. Its model and
 result-validation errors use fixed safe diagnostics, without validation inputs or
-provider exception bodies in logs/results. This scoped protection does not fix
-all generic-task error-handling issues recorded in `STATUS.md`.
+provider exception bodies in logs/results. Recognized namespaced citations in
+every prose field are validated as well as structured IDs. Existence of an ID
+does not establish factual support for a claim.
 
 Accepted task snapshots retain private note text after the source memory is
 edited, disabled, or deleted. Protect task APIs, database access, backups, and
@@ -150,9 +151,16 @@ recommendation-bearing push would require a separately reviewed content policy.
 - Tool audit arguments contain validated action data and can still be personal
   or sensitive even when they contain no credentials. API access, logs, backups,
   and retention must be protected accordingly.
-- Return generic dependency failures from health endpoints while logging the
-  underlying exception locally.
-- Persist useful but sanitized task errors. Detailed tracebacks remain in
-  protected service logs and RQ failure metadata.
+- API, task/RQ, scheduler, enqueue and notification boundaries use fixed errors
+  and allowlisted operational metadata. Raw exception messages, provider bodies,
+  SQL statements and exception chains are not persisted or logged. Failure
+  metadata retains model/request/response IDs, numeric usage, timestamps and
+  application-built provenance. Unknown exception fields are dropped.
+- JSON logging replaces exception tracebacks with a fixed classification;
+  task entry points also replace escaped exceptions before RQ stores/logs them.
+  SQLAlchemy parameter hiding is defense in depth, not the diagnostic boundary.
+- A failed terminal database transaction cannot persist its own failure. RQ
+  records a safe job failure; stale-task reconciliation later marks check-ins
+  uncertain or recovers generic work. Inspect task/job IDs and health to correlate.
 - Backups and restore tests are required before Personal Dot stores important
   personal information.

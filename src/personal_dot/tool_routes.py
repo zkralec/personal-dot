@@ -1,4 +1,5 @@
 import logging
+from personal_dot.diagnostics import queue_error
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
@@ -179,9 +180,9 @@ def _decide_approval(
         try:
             enqueue_task(task.id)
         except Exception as exc:
-            task.enqueue_error = f"{type(exc).__name__}: queue delivery failed"[:2000]
+            task.enqueue_error = queue_error(exc)
             db.commit()
-            logger.exception(
+            logger.error(
                 "Approved task could not be requeued; durable reconciliation will retry",
                 extra={
                     "event": "approval_requeue_failed",

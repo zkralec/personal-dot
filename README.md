@@ -219,7 +219,7 @@ valid JSON with:
   note evidence; an action requires a current note and a supplied priority.
 
 Action kinds are advisory: `advance_priority`, `resolve_blocker`, and
-`clarify_context`. No action is executed. Schema and structured citation checks reject
+`clarify_context`. No action is executed. Schema and structured/prose citation checks reject
 invalid output; they cannot prove that a model's interpretation is correct.
 Model/validation failures persist a safe task error, and summaries remain task
 results rather than becoming user preferences or new memories.

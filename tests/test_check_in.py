@@ -288,6 +288,40 @@ async def test_invalid_model_results_fail_safely(client, provider, invalid):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("field", ["summary", "blocker", "description", "rationale", "uncertainty"])
+async def test_unknown_prose_citations_rejected_before_success_notification(client, provider, monkeypatch, field):
+    sent = []
+    class NotificationStub:
+        def send_task_notification(self, notification):
+            sent.append(notification)
+            return NotificationResult(provider="pushover")
+    monkeypatch.setattr(jobs, "get_notification_service", lambda: NotificationStub())
+    def invalid(context):
+        result = ready_result(context)
+        text = "Invented evidence [memory:00000000-0000-0000-0000-000000000000]."
+        if field == "blocker":
+            result["blockers"][0]["text"] = text
+        elif field == "uncertainty":
+            result["uncertainty"] = [text]
+        elif field == "summary":
+            result[field] = text
+        else:
+            result["recommended_action"][field] = text
+        return result
+    provider.make_result = invalid
+    note = await create_note(client)
+    task = (await client.post("/tasks", json=request_for(note, policy="on_completion"))).json()
+    run_queued_jobs()
+    completed = (await client.get("/tasks/" + task["id"])).json()
+    assert completed["status"] == "failed" and completed["result"] is None
+    assert completed["error"] == "AgentExecutionError: Project check-in returned an invalid result"
+    assert completed["execution_metadata"]["usage"]["total_tokens"] == 35
+    assert completed["execution_metadata"]["request_id"] == "req_check_in"
+    assert "notification" not in completed["execution_metadata"]
+    assert sent == []
+
+
+@pytest.mark.anyio
 async def test_provider_failure_is_sanitized_in_result_and_logs(client, provider, caplog):
     provider.error = RuntimeError("SYNTHETIC_PROVIDER_SECRET")
     note = await create_note(client)

@@ -51,7 +51,7 @@ async def test_task_failure_is_persisted(client) -> None:
     assert fetched.status_code == 200
     body = fetched.json()
     assert body["status"] == "failed"
-    assert body["error"] == "RuntimeError: requested test failure"
+    assert body["error"] == "Task execution failed (unexpected_error)"
     assert body["completed_at"] is not None
 
 
@@ -172,7 +172,7 @@ async def test_notification_failure_does_not_corrupt_successful_result(
     assert notification["status"] == "failed"
     assert notification["provider"] == "pushover"
     assert notification["error"] == (
-        "NotificationDeliveryError: simulated provider outage"
+        "Notification delivery failed"
     )
 
 
@@ -206,7 +206,7 @@ async def test_on_failure_policy_notifies_without_replacing_task_error(
 
     body = (await client.get(f"/tasks/{task_id}")).json()
     assert body["status"] == "failed"
-    assert body["error"] == "RuntimeError: requested test failure"
+    assert body["error"] == "Task execution failed (unexpected_error)"
     assert body["execution_metadata"]["notification"]["status"] == "sent"
     assert statuses == ["failed"]
 
@@ -298,7 +298,7 @@ async def test_manual_enqueue_failure_remains_durable_and_is_reconciled(
     body = created.json()
     assert body["status"] == "queued"
     assert body["error"] is None
-    assert body["enqueue_error"] == "ConnectionError: queue delivery failed"
+    assert body["enqueue_error"] == "Queue delivery failed (queue_unavailable); durable reconciliation will retry"
 
     enqueued: list[str] = []
     scheduler = SchedulerService(

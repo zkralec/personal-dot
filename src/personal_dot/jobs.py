@@ -11,10 +11,10 @@ from personal_dot.agent_service import AgentExecutionError
 from personal_dot.check_in import execute_check_in
 from personal_dot.config import get_settings
 from personal_dot.db import SessionLocal, engine
+from personal_dot.diagnostics import agent_error_message, error_class, failure_metadata
 from personal_dot.memory_service import get_memory_service
 from personal_dot.models import Task, TaskStatus, TaskType
 from personal_dot.notification_service import (
-    NotificationError,
     TaskNotification,
     get_notification_service,
     should_notify,
@@ -91,19 +91,14 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
     )
     try:
         result = get_notification_service().send_task_notification(notification)
-    except Exception as exc:
-        safe_error = (
-            f"{type(exc).__name__}: {exc}"
-            if isinstance(exc, NotificationError)
-            else f"{type(exc).__name__}: unexpected notification failure"
-        )
+    except Exception:
         audit = {
             "policy": policy,
             "provider": provider_name,
             "status": "failed",
             "attempted_at": attempted_at.isoformat(),
             "completed_at": datetime.now(UTC).isoformat(),
-            "error": safe_error[:1000],
+            "error": "Notification delivery failed",
         }
         logger.warning(
             "Task notification failed",
@@ -113,7 +108,6 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
                 "provider": provider_name,
                 "notification_status": "failed",
             },
-            exc_info=isinstance(exc, NotificationError),
         )
     else:
         audit = {
@@ -147,7 +141,7 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
             task.execution_metadata = metadata
             session.commit()
     except Exception:
-        logger.exception(
+        logger.error(
             "Task notification audit persistence failed",
             extra={
                 "event": "notification_audit_failed",
@@ -158,6 +152,20 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
 
 
 def execute_task(task_id: str) -> dict[str, Any]:
+    # RQ persists and logs escaped exceptions, including their tracebacks. Keep
+    # raw provider/DB exceptions inside this boundary, including commit failures.
+    try:
+        return _execute_with_project_lock(task_id)
+    except Exception as exc:
+        classification = error_class(exc)
+        logger.error("Task job failed", extra={
+            "event": "task_job_failed", "task_id": task_id,
+            "error_class": classification,
+        })
+    raise RuntimeError(f"Task job failed ({classification})") from None
+
+
+def _execute_with_project_lock(task_id: str) -> dict[str, Any]:
     parsed_id = uuid.UUID(task_id)
     with SessionLocal() as session:
         task = session.get(Task, parsed_id)
@@ -238,10 +246,14 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             task.status = TaskStatus.FAILED
             task.completed_at = datetime.now(UTC)
             task.result = None
-            task.error = f"{type(exc).__name__}: {exc}"
+            task.error = (
+                "AgentExecutionError: " + agent_error_message(exc)
+                if isinstance(exc, AgentExecutionError)
+                else f"Task execution failed ({error_class(exc)})"
+            )
             task.agent_state = None
             if isinstance(exc, AgentExecutionError):
-                task.execution_metadata = exc.metadata
+                task.execution_metadata = failure_metadata(exc.metadata)
             else:
                 task.execution_metadata = {
                     "handler": task.type.value,
@@ -256,7 +268,7 @@ def _execute_task(task_id: str) -> dict[str, Any]:
             session.commit()
             log_metadata = task.execution_metadata
         _notify_terminal_task(parsed_id)
-        logger.exception(
+        logger.error(
             "Task execution failed",
             extra={
                 "event": "task_failed",
@@ -264,6 +276,7 @@ def _execute_task(task_id: str) -> dict[str, Any]:
                 "model": log_metadata.get("model"),
                 "response_id": log_metadata.get("response_id"),
                 "request_id": log_metadata.get("request_id"),
+                "error_class": error_class(exc),
             },
         )
         raise

@@ -1,16 +1,18 @@
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, Response
 from redis import Redis
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from personal_dot.db import get_db
+from personal_dot.diagnostics import error_class, queue_error
 from personal_dot.check_in import CheckInInputError, prepare_check_in
 from personal_dot.models import Task, TaskStatus, TaskType
 from personal_dot.memory_routes import router as memory_router
@@ -30,6 +32,20 @@ app.include_router(memory_router)
 DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
+@app.middleware("http")
+async def safe_unexpected_failure(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    # Catch here so the server does not log a raw unhandled DB/provider traceback.
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        logger.error("API operation failed", extra={
+            "event": "api_operation_failed", "error_class": error_class(exc),
+        })
+        return JSONResponse(status_code=503, content={"detail": "operation unavailable"})
+
+
 @app.get("/health", response_model=HealthResponse)
 def health(db: DatabaseSession) -> HealthResponse | JSONResponse:
     postgres_status = "ok"
@@ -38,14 +54,14 @@ def health(db: DatabaseSession) -> HealthResponse | JSONResponse:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError:
         postgres_status = "unavailable"
-        logger.exception("PostgreSQL health check failed", extra={"event": "health"})
+        logger.error("PostgreSQL health check failed", extra={"event": "health"})
 
     try:
         redis_client: Redis = get_redis()
         redis_client.ping()
     except Exception:
         redis_status = "unavailable"
-        logger.exception("Redis health check failed", extra={"event": "health"})
+        logger.error("Redis health check failed", extra={"event": "health"})
 
     body = {
         "status": "ok"
@@ -93,11 +109,12 @@ def create_task(request: TaskCreate, db: DatabaseSession) -> Task:
     except Exception as exc:
         # PostgreSQL remains authoritative. Leave the task queued so the
         # scheduler can redeliver it after Redis or the API recovers.
-        task.enqueue_error = f"{type(exc).__name__}: queue delivery failed"[:2000]
+        task.enqueue_error = queue_error(exc)
         db.commit()
-        logger.exception(
+        logger.error(
             "Task enqueue failed; durable reconciliation will retry",
-            extra={"event": "task_enqueue_failed", "task_id": str(task.id)},
+            extra={"event": "task_enqueue_failed", "task_id": str(task.id),
+                   "error_class": error_class(exc)},
         )
         db.refresh(task)
         return task

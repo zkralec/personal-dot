@@ -21,34 +21,33 @@ def send_test_notification() -> TestNotificationResponse:
     )
     try:
         result = get_notification_service().send_test_notification()
-    except NotificationConfigurationError as exc:
+    except NotificationConfigurationError:
         logger.warning(
             "Test notification configuration is incomplete",
             extra={"event": "notification_test_failed"},
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    except NotificationError as exc:
+            detail="notification provider is not configured",
+        ) from None
+    except NotificationError:
         logger.warning(
             "Test notification delivery failed",
             extra={"event": "notification_test_failed"},
-            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="notification provider rejected or could not deliver the request",
-        ) from exc
-    except Exception as exc:
-        logger.exception(
+        ) from None
+    except Exception:
+        logger.error(
             "Unexpected test notification failure",
             extra={"event": "notification_test_failed"},
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="notification delivery failed",
-        ) from exc
+        ) from None
 
     logger.info(
         "Test notification sent",
