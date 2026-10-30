@@ -42,6 +42,7 @@ def clean_state() -> None:
     from personal_dot.db import SessionLocal
     from personal_dot.models import (
         ApprovalRequest,
+        DocumentationPublication,
         Memory,
         NotificationDelivery,
         Note,
@@ -53,6 +54,7 @@ def clean_state() -> None:
 
     get_redis().flushdb()
     with SessionLocal() as db:
+        db.query(DocumentationPublication).delete()
         db.query(ApprovalRequest).delete()
         db.query(Note).delete()
         db.query(ToolCall).delete()

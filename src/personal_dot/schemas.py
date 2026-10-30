@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from personal_dot.check_in_schemas import CheckInRequest
 from personal_dot.github import repository_name
-from personal_dot.documentation_schemas import DocumentationRequest
+from personal_dot.documentation_schemas import DocumentationRequest, PublicationRequest
 
 from personal_dot.models import (
     ApprovalStatus,
@@ -104,6 +104,8 @@ class TaskCreate(BaseModel):
         elif self.type == TaskType.PROJECT_CHECK_IN:
             check_in = CheckInRequest.model_validate(self.payload)
             self.payload = check_in.model_dump(mode="json")
+        elif self.type == TaskType.DOCUMENTATION_PUBLISH:
+            self.payload = PublicationRequest.model_validate(self.payload).model_dump(mode="json")
         elif self.type == TaskType.DOCUMENTATION_PREVIEW:
             self.payload = DocumentationRequest.model_validate(self.payload).model_dump(mode="json")
             if self.notification_policy != NotificationPolicy.NONE:
@@ -170,7 +172,7 @@ class ScheduleCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_schedule_configuration(self) -> "ScheduleCreate":
-        if self.task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT, TaskType.DOCUMENTATION_PREVIEW}:
+        if self.task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT, TaskType.DOCUMENTATION_PREVIEW, TaskType.DOCUMENTATION_PUBLISH}:
             raise ValueError("GitHub discovery and inspection are manual tasks only")
         if self.task.type == TaskType.PROJECT_CHECK_IN:
             if "enabled" not in self.model_fields_set:

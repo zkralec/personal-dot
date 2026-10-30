@@ -427,3 +427,17 @@ from infrastructure status. No automatic correction, publication or notification
 exists. Like check-ins, interrupted previews become terminal uncertain without
 model re-execution. Migration `0011` only adds the task type; no new persistence
 layer or dependency. See [policy, API and opt-in budget](documentation-preview.md).
+
+## Bounded documentation publication
+
+Manual `documentation_publish` consumes an existing independently approved preview.
+Migration `0012` adds a durable publication job and a unique active-repository
+constraint. Repository advisory locks serialize handlers; each remote write holds
+the current task execution claim lock through reconciliation and outcome recording.
+The job persists deterministic Git objects, intent, branch/PR identifiers, exact
+revision/check/policy authorization and separate published/merged/deployed outcomes.
+Stale executions become uncertain and require explicit same-job reconciliation.
+No scheduler materialization, model call, local checkout or repository execution
+is added. Existing notification delivery retries independently. See the
+[publishing guide](documentation-publishing.md) for supported GitHub requirements,
+exact author identity, credential boundary and remote concurrency limitations.

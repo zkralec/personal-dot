@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     github_max_files: int = Field(default=40, ge=1, le=100)
     github_file_bytes: int = Field(default=65_536, ge=1, le=262_144)
     github_context_bytes: int = Field(default=262_144, ge=2, le=1_048_576)
+    docs_publish_live_enabled: bool = False
+    docs_publish_check_polls: int = Field(default=12, ge=1, le=60)
+    docs_publish_poll_seconds: float = Field(default=5, gt=0, le=30)
+    github_commit_author_name: str = "Zachary Kralec"
+    github_commit_author_email: str = "157630586+zkralec@users.noreply.github.com"
     docs_preview_live_enabled: bool = False
     docs_preview_editor_model: str = ""
     docs_preview_reviewer_model: str = ""

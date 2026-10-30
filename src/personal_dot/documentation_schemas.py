@@ -71,3 +71,8 @@ class ReviewerOutput(StrictModel):
     binding_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     decision: Literal['approve', 'changes_requested', 'insufficient_evidence']
     findings: list[ReviewFinding] = Field(max_length=10)
+
+
+class PublicationRequest(StrictModel):
+    preview_task_id: uuid.UUID
+    allow_publish: StrictBool = False

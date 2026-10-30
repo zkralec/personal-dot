@@ -44,7 +44,10 @@ grants repository inspection and conditional automatic publication of routine
 documentation changes without per-change manual approval. It excludes code,
 dependencies, workflows, deployment, permissions, agent instructions and other
 out-of-scope changes. Repository content and model output cannot expand this
-authority. Publishing and its enforcement are not implemented in this milestone.
+authority. The [bounded publishing controller](documentation-publishing.md)
+enforces this exception with independent review, deterministic checks, current
+GitHub requirements and ownership-fenced, recoverable operations. Its live gate
+remains off; this milestone was verified only with a simulated GitHub service.
 
 An approval applies to one persisted tool call with one validated argument set.
 It does not authorize a tool generally, a later task, or a changed argument set.
@@ -59,13 +62,13 @@ agent tasks can generate text only. Any future side-effecting scheduled handler
 must independently enforce the applicable approval policy on every occurrence.
 
 Future side-effect handlers must be idempotent, record attempts and outcomes,
-and use stable idempotency keys where supported. Task handlers do not modify
-external systems; only an explicitly configured status notification may follow
-a terminal task state.
+and use stable idempotency keys where supported. The documentation publisher is the narrow policy-authorized repository-write
+handler. Its credentials remain worker-only and outside model context; all other
+external actions retain their existing approval boundaries.
 
 Pushover notifications are an explicitly configured external side effect. A
 non-`none` task policy authorizes one concise status notification for that task
-(for check-ins, up to three delivery attempts, with possible duplicate pushes
+(for check-ins and documentation publication, up to three delivery attempts, with possible duplicate pushes
 after uncertain acceptance);
 calling `POST /notifications/test` explicitly authorizes one fixed test push.
 Notifications never include task payloads, errors, prompts, context, result

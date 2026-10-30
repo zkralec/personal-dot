@@ -192,3 +192,12 @@ snapshots. Publishing, full change-policy enforcement, commit/PR/merge automatio
 and schedules remain future milestones. No live model
 quality, exhaustive secret detection, host-crash recovery or exactly-once
 execution is established by repository snapshots.
+
+## Publication implementation follow-up
+
+Read-only discovery/inspection retains the token scopes and key mounting described
+above. The separate [publishing controller](documentation-publishing.md) reuses
+this authentication and snapshot evidence with explicitly scoped publication
+credentials and default-off gates. Discovery eligibility alone never authorizes
+publishing. Its implementation has simulated verification only; the previously
+recorded live read-only installation does not prove publishing access.

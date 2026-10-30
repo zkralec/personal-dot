@@ -192,3 +192,13 @@ GitHub private key, instantiate the GitHub client, or invoke the agent tool runt
 GitHub's worker-only read-only mount and discovery/inspection remain unchanged.
 A candidate is bound to its historical base commit. Any future publisher must
 recheck the current head and the full policy; none exists in this milestone.
+
+## Publication handoff
+
+The separate [bounded publisher](documentation-publishing.md) can consume a
+completed approved preview, revalidate its exact inputs/review and current GitHub
+requirements, and publish through the standing policy. Preview approval remains
+policy evidence; it is not a GitHub approving review or authority to ignore branch
+rules. Publishing is default-off and this implementation milestone made no live
+repository writes. Historical statements above describing a future publisher
+apply to the preview milestone, not the current implementation.

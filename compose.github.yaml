@@ -4,6 +4,11 @@ services:
   worker:
     user: "${DOT_GITHUB_UID:?Set the key owner UID}:${DOT_GITHUB_GID:?Set the key owner GID}"
     environment:
+      DOCS_PUBLISH_CHECK_POLLS: ${DOCS_PUBLISH_CHECK_POLLS:-12}
+      DOCS_PUBLISH_POLL_SECONDS: ${DOCS_PUBLISH_POLL_SECONDS:-5}
+      DOCS_PUBLISH_LIVE_ENABLED: ${DOCS_PUBLISH_LIVE_ENABLED:-false}
+      GITHUB_COMMIT_AUTHOR_NAME: ${GITHUB_COMMIT_AUTHOR_NAME:-Zachary Kralec}
+      GITHUB_COMMIT_AUTHOR_EMAIL: ${GITHUB_COMMIT_AUTHOR_EMAIL:-157630586+zkralec@users.noreply.github.com}
       GITHUB_OWNER: ${GITHUB_OWNER:?Set the personal account owner}
       GITHUB_APP_ID: ${GITHUB_APP_ID:?Set the GitHub App ID}
       GITHUB_INSTALLATION_ID: ${GITHUB_INSTALLATION_ID:?Set the personal installation ID}

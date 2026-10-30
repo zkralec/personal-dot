@@ -13,6 +13,7 @@ from personal_dot.config import get_settings
 from personal_dot.db import SessionLocal, engine
 from personal_dot.diagnostics import agent_error_message, error_class, failure_metadata
 from personal_dot.memory_service import get_memory_service
+from personal_dot.documentation_publish import execute_publication
 from personal_dot.documentation_preview import execute_documentation, seal_documentation_result
 from personal_dot.documentation_errors import DocumentationError, MESSAGES as DOCUMENTATION_MESSAGES
 from personal_dot.github import get_github_client
@@ -37,6 +38,9 @@ class TaskExecutionResult:
 
 
 def _perform(task: Task) -> TaskExecutionResult | AgentPaused:
+    if task.type == TaskType.DOCUMENTATION_PUBLISH:
+        result, metadata = execute_publication(task)
+        return TaskExecutionResult(result=result, metadata=metadata)
     if task.type == TaskType.DOCUMENTATION_PREVIEW:
         result, metadata = execute_documentation(task)
         return TaskExecutionResult(result=result, metadata=metadata)
@@ -95,7 +99,7 @@ def _notify_terminal_task(task_id: uuid.UUID) -> None:
         task = session.get(Task, task_id)
         if task is None or task.type in {TaskType.GITHUB_DISCOVER, TaskType.GITHUB_INSPECT, TaskType.DOCUMENTATION_PREVIEW} or not should_notify(task.notification_policy, task.status):
             return
-        if task.type == TaskType.PROJECT_CHECK_IN:
+        if task.type in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PUBLISH}:
             deliver_notification(task_id, service_factory=get_notification_service)
             return
         notification = TaskNotification(

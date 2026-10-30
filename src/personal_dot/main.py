@@ -40,7 +40,7 @@ DatabaseSession = Annotated[Session, Depends(get_db)]
 async def safe_github_validation(request: Request, exc: RequestValidationError) -> Response:
     body = exc.body if isinstance(exc.body, dict) else {}
     nested = body.get("task") if isinstance(body.get("task"), dict) else {}
-    if body.get("type") in ("github_discover", "github_inspect", "documentation_preview") or nested.get("type") in ("github_discover", "github_inspect", "documentation_preview"):
+    if body.get("type") in ("github_discover", "github_inspect", "documentation_preview", "documentation_publish") or nested.get("type") in ("github_discover", "github_inspect", "documentation_preview", "documentation_publish"):
         return JSONResponse(status_code=422, content={"detail": "invalid read or preview task request"})
     return await request_validation_exception_handler(request, exc)
 

@@ -223,12 +223,13 @@ async def test_transport_failure_records_unknown_provider_outcome(client, provid
                       else error_class(request=httpx.Request("POST", "https://synthetic.invalid")))
     note = await create_note(client)
     task = (await client.post("/tasks", json=request_for(note))).json()
-    with pytest.raises(Exception, match="Project check-in model request failed"):
+    with pytest.raises(RuntimeError, match=r"^Task job failed \([a-z_]+\)$"):
         execute_task(task["id"])
     execute_task(task["id"])
     completed = (await client.get("/tasks/" + task["id"])).json()
     assert completed["status"] == "uncertain"
     assert completed["execution_metadata"]["request_outcome"] == "unknown"
+    assert completed["error"] == "Project check-in request interrupted; provider outcome unknown; automatic execution retry disabled"
     assert len(provider.requests) == 1
 
 

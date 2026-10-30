@@ -1,5 +1,152 @@
 # Personal Dot implementation baseline
 
+
+## Bounded automatic documentation publishing — 2026-10-30
+
+**Implemented and verified with simulated GitHub, at new schema `0012`.
+Production remains at its previous deployment; this milestone did not migrate or
+recreate production, make live GitHub writes, call paid models, send real
+notifications, or enable any schedule. Both publishing gates default off.**
+This supersedes earlier statements below that no publisher exists. Earlier live
+read-only inspection evidence does not establish publishing readiness/access.
+
+### Checkpoint and independent implementation findings
+
+Created clean-tree checkpoint `654c8597d485513ead2c6f49a14457106d0d8f49`, with
+both author and committer **Zachary Kralec
+<157630586+zkralec@users.noreply.github.com>**, before implementation. Read the
+instructions, policy, status, implementation and regressions directly; historical
+deployment claims were not treated as new live verification.
+
+The previously requested ownership and delayed approval-resume repairs are
+present: fresh claim UUID/start time, claim revocation, fenced completion/failure/
+pause, continuation preservation and removal of stale approval-wait metadata.
+Their existing 21 focused cases (19 execution-reliability and two manual late
+check-in cases) passed again. Those completion guards alone were insufficient
+for publication: an obsolete handler could otherwise issue another remote write.
+The publisher now commits intent, then holds the current task-claim row lock
+through source revalidation, remote reconciliation, write and outcome recording.
+A dedicated regression proves recovery skips a locked in-flight write and a
+revoked execution cannot begin its next write.
+
+The new concurrency probe also exposed and fixed a publisher lock-order blocker:
+a duplicate initially waited for the review-source row before checking the
+repository lock. Repository locking now precedes review-source locking, so an
+overlap returns promptly. Added explicit checks that result repository/base/input/
+policy fields still match their prepared source; current preview sealing alone
+did not bind every copied display field. Added a final expected-ref check before
+opening the PR. Three legacy manual transport regressions still expected the
+inner provider failure to escape the already-sanitized job boundary; corrected
+the assertions and verified persisted uncertainty, diagnostic and no retry.
+
+### Implemented boundary and audit
+
+One manual `documentation_publish` task consumes an existing independently
+approved candidate, with no generation/review loop or model access. It rechecks
+the original snapshot, deterministic insertion policy and review binding. New
+migration `0012` adds only this task type and a durable publication table keyed
+by preview, including a unique unfinished-repository constraint. No dependency
+or schedule type was added.
+
+Content-addressed Git blobs/trees/commit preserve exact reviewed insertions and
+unrelated base entries. Ancestor trees and object-plan bytes are bounded. Only a
+new job-specific DOT ref is created; no force push/update-ref exists. The
+controller opens/reconciles one PR, verifies files, sole commit, complete tree and
+head/base identities, binds authorization to repository/base/candidate/head/
+review/checks/requirements/policy/implementation, and sends GitHub's expected-head
+SHA when merging. Checks/mergeability are polled within a bounded worker window;
+qualifying changes merge automatically without a manual approval step.
+
+Discovery eligibility is insufficient. Each target's active base/temporary rules
+and legacy protection are inspected and recorded. Unknown, unreadable or
+unsupported requirements block. Required GitHub approving/code-owner reviews
+are blockers in this initial subset: DOT's model reviewer is policy evidence,
+not a GitHub approval. Required checks include exact-head and App-provider
+identity. No rules/settings/review/status mutation or protection bypass path is
+implemented. GitHub changes-requested reviews also block merging.
+
+Durable intents and deterministic identities reconcile lost responses and
+post-acceptance DB rollback before retrying branches, objects, PRs, merges or
+cleanup. Same-preview delivery tasks reuse the same job; repository locking and
+the database constraint prevent overlapping jobs. Stale publication tasks become
+uncertain, with no automatic execution retry. Read-only reconciliation can record
+a merge accepted before authorization changed. A verified merge is durable before
+cleanup; only the job's unchanged temporary branch is removed. Blocked jobs keep
+the repository slot pending reconciliation.
+
+Candidate author **and committer** use the exact supplied name/email; mismatched
+trusted configuration blocks. Independent Git `hash-object` evidence verifies
+serialization. Only merge commits are selected, retaining the original attributed
+candidate commit as a parent; GitHub creates an additional integration-authored
+merge commit. Squash/rebase-only targets block. The candidate's name/email and
+merge parents/tree are verified after acceptance. Account-linked rendering on
+real GitHub remains for the live pilot.
+
+`published`, `merged` and `deployed` are separate; deployment remains false.
+Existing notification outbox/service delivers fixed concise statuses, with
+independent bounded retries. Provider failure cannot change the result or repeat
+model/publication work. Inspection still mints Contents/Metadata read tokens;
+publication tokens are separately repository scoped and stay outside model
+context. Worker-only read-only key mount/non-root execution are preserved; the
+existing worker metadata still shows UID/GID `1000:1000` and a read-only key mount.
+No runtime secret or populated local configuration was modified. All 38 installed
+Python modules in the final image match the checkout byte-for-byte.
+
+### Verification evidence
+
+The final application image (`dc5f5af9b6b7`, non-root `app`) passed **347 tests, 1 skipped** in 73.56 seconds,
+plus **12 manual-only recovery/notification/process cases** in 7.32 seconds:
+**359 passed total**. The 64 new publication cases include independent-review
+rejection, local binding drift, exact multi-file/nested trees, changed remote
+diff/head/base, pending/failed/missing/wrong-provider checks, automatic merge when
+checks finish, GitHub review/protection blockers, concurrent/duplicate attempts,
+stale ownership, before/after-acceptance timeouts at every write stage,
+post-acceptance DB rollback, merge-base races, changed cleanup refs, notification
+failure and authorization invalidation after a lost merge response. A real HTTP
+API plus forked non-root RQ worker completes the workflow using authored model
+stubs, an ephemeral synthetic App key and an HTTPX simulated GitHub service.
+
+Used disposable project `pd-eval-publishing-20261030`: internal Docker network,
+no published ports, tmpfs PostgreSQL/Redis, blank provider credentials, default-off
+live gates, no production key mount, and no source mounts in final-image runs.
+Fresh `0001 -> 0012` migrations, `0012 -> 0011 -> 0012` round trip,
+`alembic check` and `pip check` passed. Paid integration remained skipped; five
+existing RQ deprecation warnings remain. Schedule-enabling cases were excluded,
+including from isolation. Process/service logs were inspected. The standalone harness initially omitted
+`pg_isready`'s database argument, producing missing-default-database probe logs;
+the correct test database probe passed and the harness command was corrected.
+Redis reported the host's existing overcommit warning; no host settings were
+changed. Disposable resources were removed after verification. Local evidence is under `/tmp` in
+`pd-publishing-*.log` and `pd-publishing-process-evidence/`, not durable backup.
+
+### Limits and live-pilot readiness
+
+Ready for an owner-authorized, quiet-window live pilot after deployment and App
+permission preflight, **not live verified or deployed by this delivery**. The
+previously recorded read-only installation does not have established publication
+permissions. Owner-granted Contents/Pull requests write and Administration/Checks/
+Commit statuses/Metadata read are needed; DOT does not change App grants or
+repository rules. No real target's current merge requirements were fetched here.
+They must pass the read-only publishing preview before a live job.
+
+The supported subset excludes required GitHub approving reviews, signing, linear
+history, restricted pushes, conversation resolution, deployment/workflow/code
+scanning rules, merge queues and unknown rules. Pending checks beyond the bounded
+window need an explicit same-job reconciliation task. No automatic abandonment,
+PR closure or repository-slot release for blocked work is implemented.
+
+GitHub's REST merge API protects the expected head, but supplies no atomic
+expected-base/rule/check-snapshot condition. The controller rechecks immediately
+before writing and verifies merge parents/tree afterward; a remote race is
+recorded as merged with an owner-reconciliation blocker and retained branch.
+Ref deletion likewise lacks atomic compare-and-delete; an external actor updating
+the ref between read and delete cannot be excluded. This does not establish
+host-crash/distributed exactly-once behavior, live CI, live App attribution,
+model quality or deployment. Use a quiet repository/window for the first pilot.
+
+[Exact preview and one-live-job commands, permissions, supported rules and recovery
+procedure](documentation-publishing.md) are documented. No live pilot was started.
+
 ## Bounded documentation editor and independent reviewer — 2026-10-29
 
 **Implemented, synthetically verified and deployed at schema `0011`. Live GitHub

@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 
@@ -40,6 +40,7 @@ class TaskNotification:
     task_id: uuid.UUID
     task_type: TaskType
     status: TaskStatus
+    publication_status: Literal["merged; deployment unverified", "published; merge pending", "blocked", "preview", "uncertain"] | None = None
 
 
 class NotificationProvider(Protocol):
@@ -145,6 +146,8 @@ class NotificationService:
             if notification.status == TaskStatus.SUCCEEDED
             else "has an uncertain execution outcome" if notification.status == TaskStatus.UNCERTAIN else "failed"
         )
+        if notification.publication_status is not None:
+            status_label = notification.publication_status
         message = NotificationMessage(
             title=f"Personal Dot task {notification.status.value}",
             body=(

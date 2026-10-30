@@ -25,7 +25,7 @@ CLAIM_SECONDS = 120
 
 
 def ensure_notification(session: Session, task: Task, now: datetime) -> None:
-    if task.type != TaskType.PROJECT_CHECK_IN or not should_notify(task.notification_policy, task.status):
+    if task.type not in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PUBLISH} or not should_notify(task.notification_policy, task.status):
         return
     if session.get(NotificationDelivery, task.id) is None:
         delivery = NotificationDelivery(task_id=task.id, next_attempt_at=now,
@@ -74,7 +74,15 @@ def deliver_notification(
             return False
         task = session.get(Task, task_id)
         assert task is not None
-        notification = TaskNotification(task_id=task.id, task_type=task.type, status=task.status)
+        publication_status = None
+        if task.type == TaskType.DOCUMENTATION_PUBLISH:
+            state = task.result or {}
+            publication_status = ("uncertain" if task.status.value == "uncertain" else
+                                  "blocked" if state.get('blockers') else
+                                  "merged; deployment unverified" if state.get('merged') else
+                                  "published; merge pending" if state.get('published') else "preview")
+        notification = TaskNotification(task_id=task.id, task_type=task.type, status=task.status,
+                                        publication_status=publication_status)
         token = uuid.uuid4()
         delivery.claim_token = token
         delivery.status = "sending"

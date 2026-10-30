@@ -213,7 +213,7 @@ class SchedulerService:
                     continue
                 # Revoke the claim before publishing recovery/uncertainty.
                 task.execution_id = None
-                if task.type in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PREVIEW}:
+                if task.type in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PREVIEW, TaskType.DOCUMENTATION_PUBLISH}:
                     task.status = TaskStatus.UNCERTAIN
                     task.completed_at = now
                     task.error = "Project check-in interrupted; model request outcome unknown; automatic execution retry disabled"
@@ -222,6 +222,8 @@ class SchedulerService:
                         "interrupted_at": now.isoformat()}
                     if task.type == TaskType.DOCUMENTATION_PREVIEW:
                         task.error = "Documentation preview interrupted; model outcome unknown; automatic execution retry disabled"
+                    if task.type == TaskType.DOCUMENTATION_PUBLISH:
+                        task.error = "Documentation publishing interrupted; reconcile the existing publication before another write"
                     ensure_notification(session, task, now)
                     recovered += 1
                     logger.warning("Execution outcome unknown; automatic retry disabled", extra={

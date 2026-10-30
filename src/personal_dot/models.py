@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -31,6 +32,7 @@ class TaskType(str, enum.Enum):
     GITHUB_DISCOVER = "github_discover"
     GITHUB_INSPECT = "github_inspect"
     DOCUMENTATION_PREVIEW = "documentation_preview"
+    DOCUMENTATION_PUBLISH = "documentation_publish"
 
 
 class TaskStatus(str, enum.Enum):
@@ -225,7 +227,7 @@ class Schedule(Base):
 class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
-        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in', 'github_discover', 'github_inspect', 'documentation_preview')", name="ck_tasks_type"),
+        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in', 'github_discover', 'github_inspect', 'documentation_preview', 'documentation_publish')", name="ck_tasks_type"),
         CheckConstraint(
             "status IN "
             "('queued', 'running', 'waiting_for_approval', 'succeeded', 'failed', 'uncertain')",
@@ -429,3 +431,17 @@ class Memory(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class DocumentationPublication(Base):
+    """Durable job and operation journal, independent of delivery attempts."""
+
+    __tablename__ = "documentation_publications"
+    __table_args__ = (
+        Index("uq_documentation_active_repository", "repository_id", unique=True,
+              postgresql_where=text("completed = false")),
+    )
+    preview_task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    repository_id: Mapped[int] = mapped_column(BigInteger)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

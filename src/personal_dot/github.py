@@ -52,6 +52,8 @@ def private_key(path: str) -> RSAPrivateKey:
 
 
 class GitHubClient:
+    permissions = {"contents": "read", "metadata": "read"}
+
     def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
         self.settings = settings
         if not (OWNER.fullmatch(settings.github_owner) and settings.github_app_id
@@ -74,11 +76,14 @@ class GitHubClient:
                            "iss": str(self.settings.github_app_id)},
                           private_key(self.settings.github_app_private_key_path), algorithm="RS256")
 
-    def _request(self, method: str, path: str, token: str, *, body: dict | None = None,
-                 limit: int | None = None) -> dict[str, Any]:
-        # No supplied URLs, redirects, Link targets, git clients or remote code.
+    def _allowed(self, method: str, path: str) -> bool:
         token_path = f"/app/installations/{self.settings.github_installation_id}/access_tokens"
-        if not path.startswith('/') or path.startswith('//') or (method != 'GET' and not (method == 'POST' and path == token_path)):
+        return method == "GET" or method == "POST" and path == token_path
+
+    def _request(self, method: str, path: str, token: str, *, body: dict | None = None,
+                 limit: int | None = None) -> Any:
+        # No supplied URLs, redirects, Link targets, git clients or remote code.
+        if not path.startswith('/') or path.startswith('//') or not self._allowed(method, path):
             raise GitHubError("request_rejected")
         headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                    "X-GitHub-Api-Version": "2026-03-10", "User-Agent": "personal-dot-read-only"}
@@ -87,7 +92,7 @@ class GitHubClient:
             with self.client.stream(method, "https://api.github.com" + path, headers=headers, json=body,
                                     follow_redirects=False) as response:
                 status = response.status_code
-                if status not in {200, 201}:
+                if status not in {200, 201, 204}:
                     if 300 <= status < 400:
                         code = "redirect"
                     elif status == 401:
@@ -97,13 +102,15 @@ class GitHubClient:
                     else:
                         code = {403: "forbidden", 404: "inaccessible", 409: "empty", 422: "request_rejected"}.get(status, "unavailable")
                     raise GitHubError(code)
+                if status == 204:
+                    return {}
                 content = bytearray()
                 for chunk in response.iter_bytes(chunk_size=65_536):
                     if len(content) + len(chunk) > cap:
                         raise GitHubError("response_limit")
                     content.extend(chunk)
                 data = json.loads(content)
-                if not isinstance(data, dict):
+                if not isinstance(data, (dict, list)):
                     raise GitHubError("invalid_response")
                 return data
         except GitHubError:
@@ -139,7 +146,10 @@ class GitHubClient:
         self.installation = {"id": installation['id'], "app_id": installation['app_id'],
                              "owner": self.settings.github_owner, "owner_id": account['id'],
                              "repository_selection": installation.get('repository_selection')}
-        body: dict[str, Any] = {"permissions": {"contents": "read", "metadata": "read"}}
+        if any(installation['permissions'].get(k) != v and not (v == 'read' and installation['permissions'].get(k) == 'write')
+               for k, v in self.permissions.items() if k != 'metadata'):
+            raise GitHubError('forbidden')
+        body: dict[str, Any] = {"permissions": dict(self.permissions)}
         if repository is not None:
             body['repositories'] = [repository]
         try:
@@ -153,9 +163,8 @@ class GitHubClient:
             permissions = issued['permissions']
             if (expires.tzinfo is None or not 60 < expires.timestamp() - time.time() <= 3900
                     or not isinstance(issued['token'], str) or not issued['token']
-                    or permissions.get('contents') != 'read'
-                    or any(value != 'read' for value in permissions.values())
-                    or set(permissions) - {'contents', 'metadata'}):
+                    or any(permissions.get(k) != v for k, v in self.permissions.items() if k != 'metadata')
+                    or any(v != self.permissions.get(k) for k, v in permissions.items())):
                 raise ValueError
         except Exception:
             raise GitHubError("invalid_response") from None
@@ -167,7 +176,10 @@ class GitHubClient:
         if self._token is None or time.time() >= self._expires - 60:
             self.authenticate(self._repository)
         assert self._token is not None
-        return self._request('GET', path, self._token.get_secret_value(), limit=limit)
+        data = self._request('GET', path, self._token.get_secret_value(), limit=limit)
+        if not isinstance(data, dict):
+            raise GitHubError('invalid_response')
+        return data
 
 
 def get_github_client() -> GitHubClient:
