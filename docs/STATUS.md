@@ -1,6 +1,119 @@
 # Personal Dot implementation baseline
 
 
+## Controlled live documentation pilot preflight — 2026-10-30
+
+**Blocked before task creation. No live maintenance job was started.** The owner
+authorized one real editor/reviewer/publication job, conditional on an explicitly
+configured pilot repository and live-test budget. Neither was found in the local
+`.env`, deployed worker environment, host pilot/budget environment settings, or
+pilot/budget-named files under the existing Personal Dot configuration/data
+locations. Historical examples and application defaults were not treated as a
+new repository selection or spending authorization.
+
+The previously verified implementation was committed and pushed first, as
+requested: `d43c59816b8e3007f4b6cda897db61acf48cb7a9` on `origin/main` at
+`https://github.com/zkralec/personal-dot`. The earlier checkpoint `654c859` was
+included in that normal, non-force push. Both author and committer of this
+implementation commit are Zachary Kralec
+`157630586+zkralec@users.noreply.github.com`, using a per-command override. The
+existing checkout's Git email is different; its local/global configuration was
+preserved. This operator-requested implementation push is **not** a DOT-generated
+documentation candidate, pilot branch, PR or merge.
+
+### Observed configuration and deployment
+
+- Pilot repository and pilot task identifier: **none configured / none created**.
+  No target was chosen from examples, the checkout or GitHub discovery.
+- Deployed API schema: `0011 (head)` in the old image. The worker has no
+  `personal_dot.documentation_publish` module or publication/author settings.
+  Deployment of schema `0012` and matching API/worker/scheduler is required.
+  No production build, stop, migration or recreation was performed in this
+  blocked preflight; the established backup/restore procedure remains required.
+- Runtime `OPENAI_MODEL=gpt-6-luna`; editor/reviewer overrides are blank, so both
+  effective roles use that configured model in independent invocations. No
+  model substitution was made. The paid preview gate is false.
+- Deployed output defaults are 4,096 globally and 2,048 for previews; neither is
+  an explicitly approved live-test budget. No per-call input/output budget or
+  overall pilot spend limit was supplied. No budget was inferred.
+- The publisher's reviewed identity is Zachary Kralec with the exact account-linked
+  noreply email above. Its settings are not available in the old deployed worker.
+  Explicit worker configuration is shown below for deployment.
+- Provider credentials were checked only for presence; model and notification
+  credentials are present. No secret values were printed, changed or copied.
+  Worker remains non-root UID 1000.
+- PostgreSQL has ten existing tasks, zero queued/running/approval-wait tasks,
+  two schedules, **zero enabled schedules**, and zero pending/sending notification
+  deliveries. No new task or delivery record was created by this preflight.
+
+### Outcome and unperformed verification
+
+No repository-content inspection, documentation improvement, supporting evidence
+selection, editor/reviewer request, candidate, deterministic candidate validation,
+PR, publication commit, merge or deployment resulted from this pilot. Reviewer
+outcome is **not invoked**, rather than rejection or approval. There are no pilot
+PR/commit/merge links or GitHub author-association observations to report.
+
+Zero pilot model requests were initiated; there is no new provider usage record,
+model-cost estimate or actual billing observation for this pilot. Notification
+credentials are present, but no notification was sent: the required publication
+workflow is not deployed and there is no persisted maintenance task whose blocked
+status its existing notification outbox can deliver. No synthetic task, test push
+or manually constructed publication was substituted. Provider acceptance and
+phone receipt are therefore both **unverified / not attempted**.
+
+### Precise local configuration needed before resuming
+
+Keep secrets in the existing ignored `.env` (mode `0600`) and keep all live gates
+off until deployment/preflight is complete. Create an owner-only operator worksheet
+at `/home/zkralec/.config/personal-dot/documentation-pilot.json` with the following
+structure, replacing every placeholder with an explicit owner choice:
+
+```json
+{
+  "repository": "EXPLICITLY_SELECTED_REPOSITORY_NAME_UNDER_CONFIGURED_OWNER",
+  "budget": {
+    "max_input_bytes_per_call": "APPROVED_INTEGER_1024_THROUGH_65536",
+    "max_output_tokens_per_call": "APPROVED_INTEGER_128_THROUGH_4096"
+  },
+  "max_model_calls": 2,
+  "max_estimated_cost_usd": "OWNER_CHOSEN_CAP_IF_A_DOLLAR_CAP_IS_REQUIRED"
+}
+```
+
+The worksheet is operator input for this one job, not a new automatically consumed
+application setting. The budget fields must be JSON integers when completed.
+The workflow permits at most one editor and one reviewer call, zero SDK retries
+and at most 60 seconds per call; the effective output cap is the smaller of the
+approved request, preview and global caps. Input bytes/tokens are bounded, but
+this implementation does not enforce an exact USD ceiling. If a dollar cap is
+required, evaluate the selected model and explicit limits before submitting.
+Do not populate the worksheet with repository source or credentials. Keep it and
+its parent owner-only (`0600` file, `0700` directory).
+
+For the new worker, configure the existing supported identity/model settings in
+ignored `.env`, preserving the existing provider keys and GitHub installation:
+
+```dotenv
+GITHUB_COMMIT_AUTHOR_NAME=Zachary Kralec
+GITHUB_COMMIT_AUTHOR_EMAIL=157630586+zkralec@users.noreply.github.com
+DOCS_PREVIEW_EDITOR_MODEL=gpt-6-luna
+DOCS_PREVIEW_REVIEWER_MODEL=gpt-6-luna
+DOCS_PREVIEW_LIVE_ENABLED=false
+DOCS_PUBLISH_LIVE_ENABLED=false
+```
+
+Then follow the [publishing runbook](documentation-publishing.md#commands-for-preview-and-one-later-live-maintenance-job):
+quiet-window backup/isolated restore and migration rehearsal; deploy `0012` with
+matching images and the preserved worker-only key mount; verify schedules remain
+disabled, identity, App permissions and the selected repository's actual merge
+requirements. Grant no extra repository-rule bypass. Once those checks and the
+explicit input/budget selection are complete, use the existing two live gates for
+only the already-authorized job, with real configured model calls. If review,
+policy, budget or repository requirements block it, record that outcome without
+regeneration or a manufactured edit. The later merged content and author
+association must be verified independently of any subsequent deployment.
+
 ## Bounded automatic documentation publishing — 2026-10-30
 
 **Implemented and verified with simulated GitHub, at new schema `0012`.
