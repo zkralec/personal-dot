@@ -40,7 +40,7 @@ class TaskNotification:
     task_id: uuid.UUID
     task_type: TaskType
     status: TaskStatus
-    publication_status: Literal["merged; deployment unverified", "published; merge pending", "blocked", "preview", "uncertain", "budget exhausted"] | None = None
+    publication_status: Literal["merged; deployment unverified", "published; merge pending", "blocked", "preview", "uncertain", "budget exhausted", "failed"] | None = None
 
 
 class NotificationProvider(Protocol):
@@ -149,7 +149,7 @@ class NotificationService:
         if notification.publication_status is not None:
             status_label = notification.publication_status
         message = NotificationMessage(
-            title=f"Personal Dot task {notification.status.value}",
+            title=f"Personal Dot task {notification.publication_status or notification.status.value}",
             body=(
                 f"{notification.task_type.value.capitalize()} task {status_label}. "
                 f"ID: {notification.task_id}"

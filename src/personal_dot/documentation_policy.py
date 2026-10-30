@@ -114,7 +114,11 @@ def validate_candidate(editor: EditorOutput, prepared: dict[str, Any]) -> dict[s
         if (edit.path, edit.after_line) in anchors:
             codes.add('duplicate_anchor')
         anchors.add((edit.path, edit.after_line))
-        if edit.after_line > len(original.splitlines()) or not original.endswith('\n'):
+        original_lines = original.splitlines(keepends=True)
+        # Only the selected boundary needs a newline. Preserve an unterminated
+        # final line when inserting earlier; never join new prose to that line.
+        if (edit.after_line > len(original_lines)
+                or not original_lines[edit.after_line - 1].endswith('\n')):
             codes.add('invalid_anchor')
         elif protected_anchor(original, edit.after_line):
             codes.add('protected_section_or_code')
@@ -141,7 +145,8 @@ def validate_candidate(editor: EditorOutput, prepared: dict[str, Any]) -> dict[s
         updated = ''.join(lines)
         if len(updated.encode()) > prepared['policy']['file_bytes']:
             codes.add('file_size_limit')
-        diffs.extend(difflib.unified_diff(original.splitlines(keepends=True), updated.splitlines(keepends=True),
-                                        fromfile='a/' + path, tofile='b/' + path))
+        for line in difflib.unified_diff(original.splitlines(keepends=True), updated.splitlines(keepends=True),
+                                        fromfile='a/' + path, tofile='b/' + path):
+            diffs.append(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n')
     return {'passed': not codes, 'codes': sorted(codes), 'diff': ''.join(diffs),
             'changed_lines': changed_lines, 'changed_files': len(changed)}

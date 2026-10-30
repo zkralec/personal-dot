@@ -1,16 +1,19 @@
 from dataclasses import dataclass
+import uuid
 
 import httpx
 import pytest
 
 from personal_dot.config import Settings
-from personal_dot.models import NotificationPolicy, TaskStatus
+from personal_dot.models import NotificationPolicy, TaskStatus, TaskType
 from personal_dot.notification_service import (
     NotificationConfigurationError,
     NotificationDeliveryError,
     NotificationMessage,
     NotificationResult,
+    NotificationService,
     PushoverProvider,
+    TaskNotification,
     should_notify,
 )
 
@@ -108,6 +111,57 @@ def test_pushover_provider_returns_safe_http_error() -> None:
 )
 def test_notification_policy_decision(policy, status, expected) -> None:
     assert should_notify(policy, status) is expected
+
+
+@pytest.mark.parametrize('outcome', [None, 'blocked', 'budget exhausted', 'uncertain', 'failed',
+    'merged; deployment unverified', 'published; merge pending', 'preview'])
+def test_notification_title_matches_publication_outcome(outcome):
+    client = FakeHttpClient(httpx.Response(200, json={'status': 1, 'request': 'synthetic'}))
+    service = NotificationService(PushoverProvider(settings=Settings(
+        pushover_api_token='synthetic', pushover_user_key='synthetic'), client=client))
+    task_id = uuid.uuid4()
+    service.send_task_notification(TaskNotification(task_id=task_id,
+        task_type=TaskType.DOCUMENTATION_MAINTENANCE, status=TaskStatus.SUCCEEDED,
+        publication_status=outcome))
+    assert client.request['data']['title'] == 'Personal Dot task ' + (outcome or 'succeeded')
+    assert f'task {outcome or "completed successfully"}.' in client.request['data']['message']
+    assert str(task_id) in client.request['data']['message']
+
+
+@pytest.mark.parametrize('status,state,label', [
+    (TaskStatus.SUCCEEDED, {'outcome': 'invalid_candidate'}, 'blocked'),
+    (TaskStatus.SUCCEEDED, {'outcome': 'changes_requested'}, 'blocked'),
+    (TaskStatus.SUCCEEDED, {'outcome': 'blocked'}, 'blocked'),
+    (TaskStatus.SUCCEEDED, {'outcome': 'budget_exhausted'}, 'budget exhausted'),
+    (TaskStatus.SUCCEEDED, {'outcome': 'uncertain'}, 'uncertain'),
+    (TaskStatus.SUCCEEDED, {'outcome': 'merged', 'pool_blockers': ['transport']}, 'merged; deployment unverified'),
+    (TaskStatus.FAILED, {}, 'failed'),
+    (TaskStatus.UNCERTAIN, {}, 'uncertain'),
+])
+def test_maintenance_outbox_sends_result_status_without_source(status, state, label):
+    from datetime import UTC, datetime
+    from personal_dot.db import SessionLocal
+    from personal_dot.models import Task, NotificationDelivery
+    from personal_dot.notification_delivery import ensure_notification, deliver_notification
+
+    client = FakeHttpClient(httpx.Response(200, json={'status': 1, 'request': 'synthetic'}))
+    service = NotificationService(PushoverProvider(settings=Settings(
+        pushover_api_token='synthetic', pushover_user_key='synthetic'), client=client))
+    now = datetime.now(UTC)
+    with SessionLocal() as db, db.begin():
+        task = Task(type=TaskType.DOCUMENTATION_MAINTENANCE, status=status, payload={},
+            notification_policy=NotificationPolicy.ALWAYS,
+            result={**state, 'notify': True, 'source': 'SENSITIVE_SOURCE_MARKER'})
+        db.add(task); db.flush()
+        task_id = task.id
+        ensure_notification(db, task, now)
+    assert deliver_notification(task_id, now=now, service_factory=lambda: service)
+    assert client.request['data']['title'] == 'Personal Dot task ' + label
+    assert client.request['data']['message'] == f'Documentation_maintenance task {label}. ID: {task_id}'
+    with SessionLocal() as db:
+        task = db.get(Task, task_id)
+        assert task.status == status and task.result == {**state, 'notify': True, 'source': 'SENSITIVE_SOURCE_MARKER'}
+        assert db.get(NotificationDelivery, task_id).status == 'sent'
 
 
 @pytest.mark.anyio

@@ -1,5 +1,70 @@
 # Personal Dot implementation baseline
 
+## Daily result repair and requested retest — 2026-10-30
+
+**The application repair is deployed; daily maintenance is paused pending a
+new matching real pilot.** This supersedes the enabled-state statement below.
+The owner requested investigation, a tested fix, commit/push, and one additional
+real test about 30 minutes after that push.
+
+The 13:00 UTC task `671fdf64-1d9e-4546-bbb5-42d9a021cbbe` completed its
+orchestration but returned `invalid_candidate`, not a merged improvement.
+Its preview `8750826d-241e-4149-abef-731c21b91518` proposed an insertion after
+README line 4 in the public `zkralec/stride-lab-training-platform` repository.
+The original README's last line lacked a newline. A validator mistakenly
+required a final newline for **every** insertion, producing `invalid_anchor`
+even at an earlier valid line boundary. No reviewer, publication, branch, PR
+or merge followed. One editor call recorded 2,142 input and 537 output tokens;
+the Standard-rate estimate is $0.0004827, not an observed bill. Nine preceding
+repositories had safe `github:transport` readiness blockers; retained diagnostics
+do not identify their underlying network cause. They did not reject the edit.
+
+The notification's contradictory title came from `Task.status=succeeded`, while its
+body used the maintenance result (`blocked`). Both notification title and body
+now use the publication/maintenance outcome. Failed and uncertain execution
+also take precedence over partial publication state. Generic task notifications
+retain their existing status format; provider delivery never changes a result.
+
+Insertion validation now requires a newline only at the selected boundary.
+Earlier insertions preserve an unterminated final line byte-for-byte; appending
+after that line remains rejected. Review diffs include the standard missing-final-
+newline marker. All existing scope, evidence, protected-section and review gates
+remain enforced. The original candidate passes the repaired validator, and a
+host `git apply` check reproduced its exact inserted bytes without normalizing EOF.
+The original rejected task and candidate remain unchanged as historical evidence.
+
+The focused isolated suite passed **183 tests**, including preview validation,
+notification outbox formatting, byte-exact simulated publication, and real HTTP,
+forked-worker and dedicated-scheduler cases. Five additional operator-script dry
+runs cover successful requalification, rejection, pause revocation,
+changed daily activity and ambiguous submission without retries. Synthetic tests
+had blank credentials and no external network. No new model request or test push
+was made during verification.
+
+Deployment used the previous running image's exact dependency set with only
+application/test files replaced. All 42 installed modules in API/worker/scheduler
+match the checkout; services are healthy, `pip check` passes, and Alembic remains
+at `0013` with no schema drift. A custom-format backup, network-isolated restore,
+full-record/catalog comparisons and idempotent migration rehearsal passed.
+PostgreSQL/Redis container and mount identities, `.env`, worker UID and private-key
+mount remain unchanged. Protected backup evidence is under
+`/home/zkralec/.local/share/personal-dot/backups/result-fix-20261030T161057Z/`.
+
+The extra real test is prepared as a single operator timer to be registered after
+push, using the existing manual-preview API over the same immutable public inputs,
+then the normal maintenance publication continuation. It permits one editor and
+one fresh reviewer, the existing 65,536-input-byte / 2,048-output-token limits,
+zero retries and no correction loop. Its conservative reservation is $0.019456;
+combined with today's retained automatic reservation, $0.038912 remains within
+the existing $0.25 cap. The automatic daily assessment/call ledger is preserved;
+this owner-requested extra manual test is recorded separately in protected operator
+evidence. No cap or automatic retry allowance was increased. The new policy binding
+requires a new successful real pilot. Daily recurrence resumes through its normal
+activation check only after a reviewed, verified merge and author association;
+otherwise it remains paused and the continuation emits its normal status notice.
+Timer registration, push receipt, task IDs and eventual outcomes are retained in
+the protected retest evidence rather than claimed as completed in this checkpoint.
+
 
 ## Daily maintenance deployed and live pilot completed — 2026-10-30
 

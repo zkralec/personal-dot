@@ -193,6 +193,9 @@ A genuine rejection or no worthwhile change is recorded without regeneration.
 
 One result-driven outbox intent sends a fixed, source-free status for a merged
 improvement, a new actionable blocker/rejection/failure, or exhausted budget.
+Notification titles and bodies both use the maintenance/publication outcome;
+the task's infrastructure `succeeded` status does not imply an approved edit or
+merge. Inspect the linked task's preview validation codes for a rejection reason.
 Known unchanged repository blockers and routine no-op/no-evidence results remain
 quiet. Up to three independent delivery attempts cannot rerun generation or
 publication. Provider acceptance does not establish phone receipt.

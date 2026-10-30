@@ -135,6 +135,30 @@ async def run(client, pilot=True):
 
 
 @pytest.mark.anyio
+async def test_unterminated_readme_reaches_review_and_exact_publication(client, setup):
+    api, models = setup
+    original = TARGET + '\nPreserved final line'
+    raw = original.encode()
+    blob = object_sha('blob', raw)
+    api.objects['blobs'][blob] = {'sha': blob, 'encoding': 'base64', 'size': len(raw),
+                                'content': base64.b64encode(raw).decode()}
+    base = api.objects['commits'][COMMIT]
+    entries = copy.deepcopy(api.objects['trees'][base['tree']['sha']]['tree'])
+    next(e for e in entries if e['path'] == 'README.md')['sha'] = blob
+    tree = tree_sha(entries)
+    api.objects['trees'][tree] = {'sha': tree, 'tree': entries, 'truncated': False}
+    base['tree']['sha'] = tree
+    await configure(client)
+    task = await run(client)
+    assert task['result']['outcome'] == 'merged', task
+    assert [r[0] for r in models.requests] == ['editor', 'reviewer']
+    assert '\\ No newline at end of file' in models.requests[1][2]['diff']
+    writes = [json.loads(r.content) for r in api.requests
+              if r.method == 'POST' and r.url.path.endswith('/git/blobs')]
+    assert [w['content'] for w in writes] == [TARGET + '\nTask results remain in PostgreSQL.\n\nPreserved final line']
+
+
+@pytest.mark.anyio
 async def test_real_handlers_pilot_merge_usage_and_activation(client, setup):
     api, models = setup
     await configure(client)

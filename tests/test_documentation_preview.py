@@ -234,6 +234,28 @@ async def test_line_limit_and_protected_sections(client, models, monkeypatch):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize('after_line,code', [(3, None), (4, 'invalid_anchor'), (5, 'invalid_anchor')])
+async def test_unterminated_target_checks_selected_boundary(client, models, after_line, code):
+    original = '# Fixture\n\nA small personal agent.\nPreserved final line'
+    body = create_inspection({'docs/overview.md': original})
+    body['payload']['targets'] = [{'path': 'docs/overview.md', 'sha256': text_hash(original)}]
+    models.editor = lambda context: {**candidate(context), 'edits': [{
+        **candidate(context)['edits'][0], 'path': 'docs/overview.md', 'after_line': after_line}]}
+    task = await run_preview(client, body)
+    if code:
+        assert task['result']['validation']['codes'] == [code]
+        assert task['result']['outcome'] == 'invalid_candidate'
+        assert len(models.requests) == 1
+        return
+    assert task['result']['outcome'] == 'approved_candidate'
+    diff = task['result']['candidate']['diff']
+    assert diff == ('--- a/docs/overview.md\n+++ b/docs/overview.md\n@@ -1,4 +1,6 @@\n'
+        ' # Fixture\n \n A small personal agent.\n+\n+Task results remain in PostgreSQL.\n'
+        ' Preserved final line\n\\ No newline at end of file\n')
+    assert models.requests[1][2]['diff'] == diff
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize('mutate', ['wrong_hash', 'missing_source', 'private', 'missing_attestation', 'forbidden_target', 'out_of_range', 'too_small_budget'])
 async def test_explicit_selection_and_nonheuristic_sharing_gates(client, models, mutate):
     body = create_inspection(private=mutate == 'private')

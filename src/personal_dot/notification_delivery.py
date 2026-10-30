@@ -82,11 +82,12 @@ def deliver_notification(
         publication_status = None
         if task.type in {TaskType.DOCUMENTATION_PUBLISH, TaskType.DOCUMENTATION_MAINTENANCE}:
             state = task.result or {}
-            publication_status = ("budget exhausted" if state.get("outcome") == "budget_exhausted" else
+            publication_status = ("failed" if task.status.value == "failed" else
+                                  "uncertain" if task.status.value == "uncertain" or state.get("outcome") == "uncertain" else
+                                  "budget exhausted" if state.get("outcome") == "budget_exhausted" else
                                   "blocked" if task.type == TaskType.DOCUMENTATION_MAINTENANCE and state.get("outcome") in {"blocked", "changes_requested", "invalid_candidate"} else
                                   "merged; deployment unverified" if state.get("outcome") == "merged" else
                                   "blocked" if state.get("pool_blockers") else
-                                  "uncertain" if task.status.value == "uncertain" else
                                   "blocked" if state.get('blockers') else
                                   "merged; deployment unverified" if state.get('merged') else
                                   "published; merge pending" if state.get('published') else "preview")

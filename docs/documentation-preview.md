@@ -31,6 +31,9 @@ This is a deliberately narrow initial editor:
 - Existing `README.md` and plain `.md` files under `docs/` only; no file creation,
   rename, deletion or rewriting. Candidates insert explanatory paragraphs at
   original 1-based line anchors, preserving every existing byte and heading.
+  An insertion requires a newline at its selected boundary. A missing final
+  newline does not prevent earlier insertions; appending to that final line is
+  rejected without normalizing or rewriting the source.
 - At most three changed files and 300 added lines, including blank lines. Trusted
   `DOCS_PREVIEW_MAX_FILES` and `DOCS_PREVIEW_MAX_CHANGED_LINES` can tighten those
   ceilings; raising them requires a new reviewed policy version.
