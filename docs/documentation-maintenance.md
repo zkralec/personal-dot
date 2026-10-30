@@ -46,3 +46,9 @@ operations. Default-off operator and per-task gates remain. This delivery is
 simulated verification only; no real branch/commit/PR/merge or schedule enabling
 is authorized or performed here. Unsupported repository requirements record
 blockers rather than weakening policy or GitHub rules.
+
+Scheduled orchestration uses the same standing scope and independent review;
+its [daily controls](documentation-schedules.md) cannot expand permissions.
+Owner-configured time, budget, exclusions, a matching genuine pilot and default-off
+operator gates are required for activation. Models/repository content cannot
+change those controls. There is no documentation or commit quota.

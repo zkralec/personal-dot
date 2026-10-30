@@ -25,7 +25,12 @@ CLAIM_SECONDS = 120
 
 
 def ensure_notification(session: Session, task: Task, now: datetime) -> None:
-    if task.type not in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PUBLISH} or not should_notify(task.notification_policy, task.status):
+    if task.type not in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PUBLISH, TaskType.DOCUMENTATION_MAINTENANCE} or not should_notify(task.notification_policy, task.status):
+        return
+    if task.type == TaskType.DOCUMENTATION_MAINTENANCE:
+        if task.result is not None and task.result.get('notify') is not True:
+            return
+    if task.maintenance_parent_id is not None:
         return
     if session.get(NotificationDelivery, task.id) is None:
         delivery = NotificationDelivery(task_id=task.id, next_attempt_at=now,
@@ -75,9 +80,13 @@ def deliver_notification(
         task = session.get(Task, task_id)
         assert task is not None
         publication_status = None
-        if task.type == TaskType.DOCUMENTATION_PUBLISH:
+        if task.type in {TaskType.DOCUMENTATION_PUBLISH, TaskType.DOCUMENTATION_MAINTENANCE}:
             state = task.result or {}
-            publication_status = ("uncertain" if task.status.value == "uncertain" else
+            publication_status = ("budget exhausted" if state.get("outcome") == "budget_exhausted" else
+                                  "blocked" if task.type == TaskType.DOCUMENTATION_MAINTENANCE and state.get("outcome") in {"blocked", "changes_requested", "invalid_candidate"} else
+                                  "merged; deployment unverified" if state.get("outcome") == "merged" else
+                                  "blocked" if state.get("pool_blockers") else
+                                  "uncertain" if task.status.value == "uncertain" else
                                   "blocked" if state.get('blockers') else
                                   "merged; deployment unverified" if state.get('merged') else
                                   "published; merge pending" if state.get('published') else "preview")

@@ -441,3 +441,14 @@ No scheduler materialization, model call, local checkout or repository execution
 is added. Existing notification delivery retries independently. See the
 [publishing guide](documentation-publishing.md) for supported GitHub requirements,
 exact author identity, credential boundary and remote concurrency limitations.
+
+## Daily repository maintenance
+
+`documentation_maintenance` orchestrates ordinary inspection/preview/publication
+child tasks. Migration `0013` adds explicit control, repository/assessment cache,
+run and daily-reservation records plus child-parent ownership links. The existing
+dedicated scheduler materializes one daily New York wall-time occurrence and
+coalesces downtime. Global serialization, daily assessment/call/merge reservation,
+parent/child fences and a pause generation constrain external actions. Account-wide
+inspection access remains; readiness and the existing public model-sharing policy
+are separately enforced. See the [operations guide](documentation-schedules.md).

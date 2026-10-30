@@ -183,6 +183,8 @@ class AgentService:
             "max_output_tokens": self.settings.openai_max_output_tokens,
             "store": False,
         }
+        if self.settings.openai_service_tier is not None:
+            request["service_tier"] = self.settings.openai_service_tier
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"

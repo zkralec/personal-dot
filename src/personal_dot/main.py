@@ -19,6 +19,7 @@ from personal_dot.documentation_preview import prepare_documentation
 from personal_dot.documentation_errors import DocumentationError, MESSAGES as DOCUMENTATION_MESSAGES
 from personal_dot.check_in import CheckInInputError, prepare_check_in
 from personal_dot.models import Task, TaskStatus, TaskType
+from personal_dot.maintenance_routes import router as maintenance_router
 from personal_dot.memory_routes import router as memory_router
 from personal_dot.notification_routes import router as notification_router
 from personal_dot.queue import get_redis
@@ -33,6 +34,7 @@ app.include_router(schedule_router)
 app.include_router(notification_router)
 app.include_router(tool_router)
 app.include_router(memory_router)
+app.include_router(maintenance_router)
 DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
@@ -40,7 +42,7 @@ DatabaseSession = Annotated[Session, Depends(get_db)]
 async def safe_github_validation(request: Request, exc: RequestValidationError) -> Response:
     body = exc.body if isinstance(exc.body, dict) else {}
     nested = body.get("task") if isinstance(body.get("task"), dict) else {}
-    if body.get("type") in ("github_discover", "github_inspect", "documentation_preview", "documentation_publish") or nested.get("type") in ("github_discover", "github_inspect", "documentation_preview", "documentation_publish"):
+    if body.get("type") in ("github_discover", "github_inspect", "documentation_preview", "documentation_publish", "documentation_maintenance") or nested.get("type") in ("github_discover", "github_inspect", "documentation_preview", "documentation_publish", "documentation_maintenance"):
         return JSONResponse(status_code=422, content={"detail": "invalid read or preview task request"})
     return await request_validation_exception_handler(request, exc)
 

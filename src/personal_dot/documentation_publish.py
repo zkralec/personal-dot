@@ -25,6 +25,7 @@ from personal_dot.documentation_preview import seal_documentation_result
 from personal_dot.documentation_schemas import PublicationRequest
 from personal_dot.github_errors import GitHubError
 from personal_dot.github_publication import PublishingGitHubClient, check_evidence, merge_requirements
+from personal_dot.maintenance_control import MaintenanceBlocked, child_permission, merge_intent, assert_merge_day
 from personal_dot.models import DocumentationPublication, Task, TaskStatus, TaskType
 from personal_dot.repository_inspection import identity
 
@@ -83,15 +84,17 @@ class Controller:
         self.root = ''
         self.repository: dict = {}
 
-    def save(self) -> None:
+    def save(self, operation: str | None = None) -> None:
         with SessionLocal() as session, session.begin():
             _owner(session, self.task)
+            if operation is not None:
+                merge_intent(session, self.task, operation)
             job = session.get(DocumentationPublication, self.preview_id)
             assert job is not None
             job.state = copy.deepcopy(self.state)
 
     def remote_gate(self) -> tuple[dict, list[str], list[dict]]:
-        raw = self.client.get(self.root)
+        raw = self.client.repository_metadata(self.root)
         repo = identity(raw, self.client)
         if (repo['id'] != self.repository['id'] or repo['name'] != self.repository['name']
                 or repo['owner_id'] != self.repository['owner_id']
@@ -112,11 +115,12 @@ class Controller:
         previous = journal.get(key, {})
         journal[key] = {**previous, 'status': 'intent', 'intent_at': datetime.now(UTC).isoformat(),
                         'write_attempts': previous.get('write_attempts', 0) + 1}
-        self.save()
+        self.save(operation=key)
         error: BaseException | None = None
         result: dict = {}
         with SessionLocal() as session, session.begin():
             _owner(session, self.task)
+            assert_merge_day(session, self.task, key)
             source, binding = reviewed_source(session, self.preview_id)
             if binding != self.binding or not get_settings().docs_publish_live_enabled:
                 raise PublicationBlocked('authorization_invalidated')
@@ -136,7 +140,7 @@ class Controller:
                 journal[key].update(status='completed', result=result)
             except BaseException as exc:
                 # RQ timeouts derive from BaseException. Persist only fixed codes.
-                journal[key].update(status='unknown', error=exc.code if isinstance(exc, (GitHubError, PublicationBlocked)) else 'operation_interrupted')
+                journal[key].update(status='unknown', error=exc.code if isinstance(exc, (GitHubError, PublicationBlocked, MaintenanceBlocked)) else 'operation_interrupted')
                 error = exc
             journal[key]['write_attempts'] = self.state.pop('write_attempts', 0)
             self.state.pop('current_operation', None)
@@ -156,6 +160,7 @@ class Controller:
         self.repository = source.payload['context']['repository']
         self.root = f"/repos/{get_settings().github_owner}/{self.repository['name']}"
         self.client.authenticate(self.repository['name'])
+        needs_revalidation = False
         with SessionLocal() as session, session.begin():
             _owner(session, self.task)
             job = session.get(DocumentationPublication, self.preview_id)
@@ -177,10 +182,27 @@ class Controller:
                 session.add(job)
             else:
                 self.state = copy.deepcopy(job.state)
-                if self.state['binding_sha256'] != self.binding:
-                    raise PublicationBlocked('authorization_invalidated')
-                if job.completed:
+                needs_revalidation = self.state['binding_sha256'] != self.binding
+                if job.completed and not needs_revalidation:
                     return self.state
+        if needs_revalidation:
+            if not self.state.get('pr_number'):
+                raise PublicationBlocked('authorization_invalidated')
+            observed = self.client.get(self.root + '/pulls/' + str(self.state['pr_number']))
+            if not observed.get('merged'):
+                raise PublicationBlocked('authorization_invalidated')
+            # A completed remote merge is a fact, even after a publisher repair.
+            # Recompute the entire original object plan from the still-valid
+            # independent review before adopting current authority for cleanup.
+            expected = object_plan(self.client, self.root,
+                {**source.payload, 'candidate': source.result['candidate']}, self.state['created_at'])
+            if digest(expected) != self.state.get('plan_sha256') or digest(self.state['plan']) != digest(expected):
+                raise PublicationBlocked('publication_plan_changed')
+            self.state['binding_revalidation'] = {'previous': self.state['binding_sha256'],
+                'current': self.binding, 'reason': 'confirmed_remote_merge_cleanup_only'}
+            self.state['binding_sha256'] = self.binding
+            self.save()
+            return self.finish_merge(observed)
         # Reconcile an existing PR before any freshness gate: merge acceptance can
         # advance the base while the preceding response is lost.
         if self.state.get('pr_number'):
@@ -337,16 +359,23 @@ class Controller:
         head = self.state['plan'][-1]['sha']
         if not pr.get('merged') or pr['head']['sha'] != head:
             raise PublicationBlocked('merge_outcome_not_confirmed')
-        commit = self.client.get(self.root + '/git/commits/' + pr['merge_commit_sha'])
-        # Expected-head protects the head; REST offers no expected-base parameter.
-        # Verify both parents/tree after acceptance and report any race explicitly.
+        merge_sha = (pr.get('merge_commit_sha') or self.state.get('merge_commit')
+                     or self.state.get('operations', {}).get('merge', {}).get('result', {}).get('sha'))
+        fallback = not merge_sha
+        if fallback:
+            # An ambiguous response may lose the receipt as well. The current
+            # base can identify this merge only when both parents/tree match.
+            branch = self.client.get(self.root + '/branches/' + quote(self.state['base_branch'], safe=''))
+            merge_sha = branch['commit']['sha']
+        commit = self.client.get(self.root + '/git/commits/' + merge_sha)
         if ([p['sha'] for p in commit['parents']] != [self.state['base_commit'], head]
                 or commit['tree']['sha'] != self.state['plan'][-1]['body']['tree']):
-            self.state.update(merged=True, merge_commit=pr['merge_commit_sha'], blockers=['merged_revision_requires_owner_reconciliation'])
+            self.state.update(merged=True, merge_commit=None if fallback else merge_sha,
+                blockers=['merge_commit_evidence_missing' if fallback else 'merged_revision_requires_owner_reconciliation'])
             self.save()
             return self.state
         verify_commit(self.client, self.root, self.state['plan'])
-        self.state.update(published=True, merged=True, merge_commit=pr['merge_commit_sha'], deployed=False, blockers=[])
+        self.state.update(published=True, merged=True, merge_commit=merge_sha, deployed=False, blockers=[])
         self.save()  # Merge outcome is durable before cleanup can start.
 
         def cleanup():
@@ -396,11 +425,16 @@ def reconcile_blocked(task: Task, preview_id: uuid.UUID, reason: str) -> dict:
                 if pr['head']['sha'] == state['plan'][-1]['sha'] and pr['head']['repo']['id'] == state['repository_id']:
                     state['published'] = True
                     if pr.get('merged'):
-                        state.update(merged=True, merge_commit=pr['merge_commit_sha'], deployed=False)
-                        commit = client.get(root + '/git/commits/' + pr['merge_commit_sha'])
-                        state['remote_merge_verified'] = (
-                            [p['sha'] for p in commit['parents']] == [state['base_commit'], state['plan'][-1]['sha']]
+                        merge_sha = (pr.get('merge_commit_sha') or state.get('merge_commit')
+                            or state.get('operations', {}).get('merge', {}).get('result', {}).get('sha'))
+                        fallback = not merge_sha
+                        if fallback:
+                            merge_sha = client.get(root + '/branches/' + quote(state['base_branch'], safe=''))['commit']['sha']
+                        commit = client.get(root + '/git/commits/' + merge_sha)
+                        verified = ([p['sha'] for p in commit['parents']] == [state['base_commit'], state['plan'][-1]['sha']]
                             and commit['tree']['sha'] == state['plan'][-1]['body']['tree'])
+                        state.update(merged=True, merge_commit=merge_sha if verified or not fallback else None,
+                                     deployed=False, remote_merge_verified=verified)
             state['blockers'] = [reason]
             state['reconciled_read_only_at'] = datetime.now(UTC).isoformat()
             with SessionLocal() as session, session.begin():
@@ -448,9 +482,9 @@ def execute_publication(task: Task) -> tuple[dict, dict]:
             else:
                 result = controller.run(source)
         return result, {'handler': 'documentation_publish', 'success': not result.get('blockers')}
-    except (PublicationBlocked, GitHubError, KeyError, TypeError, ValueError) as exc:
+    except (PublicationBlocked, GitHubError, MaintenanceBlocked, KeyError, TypeError, ValueError) as exc:
         result = copy.deepcopy(controller.state) if controller else {}
-        code = exc.code if isinstance(exc, (PublicationBlocked, GitHubError)) else 'invalid_response'
+        code = exc.code if isinstance(exc, (PublicationBlocked, GitHubError, MaintenanceBlocked)) else 'invalid_response'
         if code in {'review_or_policy_invalidated', 'authorization_invalidated', 'configured_author_mismatch', 'publishing_operator_gate_disabled'}:
             try:
                 result = reconcile_blocked(task, request.preview_task_id, code) or result

@@ -1,12 +1,13 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum as SQLAlchemyEnum,
     ForeignKey,
@@ -33,6 +34,7 @@ class TaskType(str, enum.Enum):
     GITHUB_INSPECT = "github_inspect"
     DOCUMENTATION_PREVIEW = "documentation_preview"
     DOCUMENTATION_PUBLISH = "documentation_publish"
+    DOCUMENTATION_MAINTENANCE = "documentation_maintenance"
 
 
 class TaskStatus(str, enum.Enum):
@@ -165,7 +167,7 @@ memory_type_column = SQLAlchemyEnum(
 class Schedule(Base):
     __tablename__ = "schedules"
     __table_args__ = (
-        CheckConstraint("task_type IN ('echo', 'fail', 'agent', 'project_check_in')", name="ck_schedules_task_type"),
+        CheckConstraint("task_type IN ('echo', 'fail', 'agent', 'project_check_in', 'documentation_maintenance')", name="ck_schedules_task_type"),
         CheckConstraint(
             "schedule_type IN ('once', 'interval', 'cron')",
             name="ck_schedules_type",
@@ -186,6 +188,8 @@ class Schedule(Base):
             name="ck_schedules_configuration",
         ),
         Index("ix_schedules_due", "enabled", "next_run_at"),
+        Index("uq_maintenance_schedule", "task_type", unique=True,
+              postgresql_where=text("task_type = 'documentation_maintenance'")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -227,7 +231,7 @@ class Schedule(Base):
 class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
-        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in', 'github_discover', 'github_inspect', 'documentation_preview', 'documentation_publish')", name="ck_tasks_type"),
+        CheckConstraint("type IN ('echo', 'fail', 'agent', 'project_check_in', 'github_discover', 'github_inspect', 'documentation_preview', 'documentation_publish', 'documentation_maintenance')", name="ck_tasks_type"),
         CheckConstraint(
             "status IN "
             "('queued', 'running', 'waiting_for_approval', 'succeeded', 'failed', 'uncertain')",
@@ -274,6 +278,7 @@ class Task(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    maintenance_parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
     # Fences writes by workers whose claim was revoked by stale recovery.
     execution_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     agent_state: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -444,4 +449,55 @@ class DocumentationPublication(Base):
     preview_task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
     repository_id: Mapped[int] = mapped_column(BigInteger)
     completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class MaintenanceControl(Base):
+    __tablename__ = "maintenance_control"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    paused: Mapped[bool] = mapped_column(Boolean, default=True)
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    configuration_sha256: Mapped[str] = mapped_column(String(64))
+    schedule_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("schedules.id", ondelete="RESTRICT"))
+    pilot_task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
+    discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    discovery: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class MaintenanceRepository(Base):
+    __tablename__ = "maintenance_repositories"
+    repository_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    identity: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class MaintenanceAssessment(Base):
+    __tablename__ = "maintenance_assessments"
+    repository_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    outcome: Mapped[str] = mapped_column(String(64))
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"))
+    state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class MaintenanceDay(Base):
+    __tablename__ = "maintenance_days"
+    __table_args__ = (CheckConstraint("reserved_microusd >= 0 AND model_calls >= 0 AND model_calls <= 2", name="ck_maintenance_day_limits"),)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    reserved_microusd: Mapped[int] = mapped_column(Integer, default=0)
+    model_calls: Mapped[int] = mapped_column(Integer, default=0)
+    assessment_owner: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
+    merge_owner: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=True)
+
+
+class MaintenanceRun(Base):
+    __tablename__ = "maintenance_runs"
+    task_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    configuration_sha256: Mapped[str] = mapped_column(String(64))
+    budget_day: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reserved_microusd: Mapped[int] = mapped_column(Integer, default=0)
     state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

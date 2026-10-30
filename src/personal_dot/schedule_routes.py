@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from personal_dot.db import get_db
 from personal_dot.check_in import CheckInInputError, prepare_check_in
-from personal_dot.models import Schedule, ScheduleType, Task, TaskType
+from personal_dot.models import MaintenanceControl, Schedule, ScheduleType, Task, TaskType
 from personal_dot.schedule_calculations import (
     as_utc,
     next_cron_occurrence,
@@ -63,6 +63,8 @@ def _initial_next_run(request: ScheduleCreate, now: datetime) -> datetime:
 
 @router.post("", response_model=ScheduleRead, status_code=status.HTTP_201_CREATED)
 def create_schedule(request: ScheduleCreate, db: DatabaseSession) -> Schedule:
+    if request.task.type == TaskType.DOCUMENTATION_MAINTENANCE:
+        raise HTTPException(409, "Configure the single daily maintenance schedule through /maintenance/configuration")
     _validate_check_in_inputs(request.task.type, request.task.payload, db)
     now = datetime.now(UTC)
     next_run = _initial_next_run(request, now)
@@ -114,6 +116,10 @@ def get_schedule(schedule_id: uuid.UUID, db: DatabaseSession) -> Schedule:
 def update_schedule(
     schedule_id: uuid.UUID, request: ScheduleUpdate, db: DatabaseSession
 ) -> Schedule:
+    observed = db.get(Schedule, schedule_id)
+    if observed is not None and observed.task_type == TaskType.DOCUMENTATION_MAINTENANCE:
+        # Match /maintenance's control -> schedule lock order.
+        db.scalar(select(MaintenanceControl).where(MaintenanceControl.id == 1).with_for_update())
     schedule = db.scalar(
         select(Schedule).where(Schedule.id == schedule_id).with_for_update()
     )
@@ -122,6 +128,16 @@ def update_schedule(
             status_code=status.HTTP_404_NOT_FOUND, detail="schedule not found"
         )
 
+    if schedule.task_type == TaskType.DOCUMENTATION_MAINTENANCE:
+        from personal_dot.maintenance_routes import require_activation
+        control = db.scalar(select(MaintenanceControl).where(MaintenanceControl.id == 1).with_for_update())
+        if control is None or control.schedule_id != schedule.id:
+            raise HTTPException(409, "Maintenance control is missing")
+        if request.enabled:
+            require_activation(db, control)
+        control.paused = not request.enabled
+        if not request.enabled:
+            control.discovery = {**control.discovery, 'pause_generation': control.discovery.get('pause_generation', 0) + 1}
     if request.enabled and not schedule.enabled:
         _validate_check_in_inputs(schedule.task_type, schedule.payload, db)
         if schedule.next_run_at is None:

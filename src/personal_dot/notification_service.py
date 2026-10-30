@@ -40,7 +40,7 @@ class TaskNotification:
     task_id: uuid.UUID
     task_type: TaskType
     status: TaskStatus
-    publication_status: Literal["merged; deployment unverified", "published; merge pending", "blocked", "preview", "uncertain"] | None = None
+    publication_status: Literal["merged; deployment unverified", "published; merge pending", "blocked", "preview", "uncertain", "budget exhausted"] | None = None
 
 
 class NotificationProvider(Protocol):

@@ -610,3 +610,32 @@ async def test_multiple_targets_preserve_nested_tree_and_reviewed_bytes(client, 
     assert len([op for op in task['result']['plan'] if op['kind'] == 'trees']) == 2
     commit = service.objects['commits'][task['result']['plan'][-1]['sha']]
     assert commit['parents'] == [{'sha': COMMIT}]
+
+
+@pytest.mark.anyio
+async def test_missing_pr_merge_sha_uses_persisted_merge_receipt(client, service, models):
+    preview=await run_preview(client,create_inspection())
+    original=service.current_pr
+    def missing_sha():
+        result=original()
+        if result.get('merged'): result['merge_commit_sha']=None
+        return result
+    service.current_pr=missing_sha
+    result=await attempt(client,preview)
+    assert result['result']['merged'] and result['result']['branch_deleted']
+    assert result['result']['merge_commit']=='f'*40
+    assert sum(k=='PUT /pulls/1/merge' for k,_ in service.writes)==1
+
+
+@pytest.mark.anyio
+async def test_confirmed_merge_revalidates_new_publisher_for_cleanup_only(client, service, models, monkeypatch):
+    preview=await run_preview(client,create_inspection())
+    service.timeout_after='PUT /pulls/1/merge'
+    first=await attempt(client,preview)
+    assert first['result']['blockers']==['timeout']
+    before=len(service.writes)
+    monkeypatch.setattr(publishing,'IMPLEMENTATION','repaired-publisher')
+    result=await attempt(client,preview)
+    assert result['result']['merged'] and result['result']['branch_deleted']
+    assert result['result']['binding_revalidation']['reason']=='confirmed_remote_merge_cleanup_only'
+    assert all(k.startswith('DELETE') for k,_ in service.writes[before:])

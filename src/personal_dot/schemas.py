@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from personal_dot.maintenance_schemas import MaintenanceRequest
 from personal_dot.check_in_schemas import CheckInRequest
 from personal_dot.github import repository_name
 from personal_dot.documentation_schemas import DocumentationRequest, PublicationRequest
@@ -104,6 +105,8 @@ class TaskCreate(BaseModel):
         elif self.type == TaskType.PROJECT_CHECK_IN:
             check_in = CheckInRequest.model_validate(self.payload)
             self.payload = check_in.model_dump(mode="json")
+        elif self.type == TaskType.DOCUMENTATION_MAINTENANCE:
+            self.payload = MaintenanceRequest.model_validate(self.payload).model_dump(mode="json")
         elif self.type == TaskType.DOCUMENTATION_PUBLISH:
             self.payload = PublicationRequest.model_validate(self.payload).model_dump(mode="json")
         elif self.type == TaskType.DOCUMENTATION_PREVIEW:

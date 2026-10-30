@@ -131,13 +131,16 @@ private key. No key mount or root execution is added to API/scheduler/migrate/te
 For a separately authorized pilot, an operator must explicitly grant the App:
 
 - Contents and Pull requests: write.
-- Administration, Checks, Commit statuses and Metadata: read.
+- Checks, Commit statuses and Metadata: read.
+- Administration: read only when protected-branch inspection requires it.
 
-Administration read is needed to inspect legacy protections; Administration
+Administration read is requested only to inspect protected branches; unprotected
+targets do not need that grant. Missing access blocks the protected target. Administration
 write is neither requested nor supported. Installation tokens are repository
 scoped, short lived and process local. Ordinary discovery/inspection continues
-to request only Contents/Metadata read. Publishing preview requests read scopes
-only. No credentials enter model inputs, task data, Git config, URLs or logs.
+to request only Contents/Metadata read. Publishing previews normally request read scopes. When GitHub omits merge
+settings, the preview obtains already-granted publication scopes for a GET-only
+capability read; repository writes remain disabled on that client. No credentials enter model inputs, task data, Git config, URLs or logs.
 The previously documented read-only installation will block publication until
 its permissions are separately changed by the owner; this milestone makes no
 App permission or installation changes.
@@ -230,3 +233,16 @@ transactional remote snapshots.
 Relevant GitHub contracts: [active branch rules](https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch),
 [legacy protection permissions](https://docs.github.com/en/rest/branches/branch-protection#get-branch-protection),
 and [expected-head merge behavior](https://docs.github.com/en/rest/pulls/pulls#merge-a-pull-request).
+
+## Scheduled operation
+
+The [daily maintenance guide](documentation-schedules.md) describes the account-wide
+pool, explicit New York time, budget reservations, cached assessments, one-job
+limits, successful-pilot gate and pause semantics. Publication remains this same
+controller; the scheduler does not implement a second GitHub writer.
+
+If a merged PR omits its merge SHA, finalization uses the persisted merge receipt
+and verifies the expected parents/tree. Read-only reconciliation remains possible
+when authorization changes. A repaired publisher may revalidate an already merged
+job's exact original plan for cleanup; it cannot use that exception to create or
+merge an unmerged PR. Daily maintenance continuation never regenerates its candidate.

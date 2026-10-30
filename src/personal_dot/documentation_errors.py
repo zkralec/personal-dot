@@ -6,6 +6,7 @@ MESSAGES = {
     'snapshot_changed': 'Documentation inspection snapshot or selected input changed',
     'input_limit': 'Documentation preview input exceeds its explicit budget',
     'live_disabled': 'Paid documentation preview requires both the operator gate and explicit per-task permission',
+    'maintenance_stopped': 'Documentation maintenance stopped at its ownership, pause or budget boundary',
     'model_failed': 'Documentation preview model request failed',
     'ownership_lost': 'Documentation execution ownership was revoked',
 }

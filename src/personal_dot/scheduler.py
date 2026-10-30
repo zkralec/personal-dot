@@ -159,7 +159,7 @@ class SchedulerService:
                     ensure_notification(session, task, now)
 
             schedule.last_run_at = occurrence
-            if schedule.task_type == TaskType.PROJECT_CHECK_IN:
+            if schedule.task_type in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_MAINTENANCE}:
                 schedule.next_run_at = next_occurrence_after(schedule, now) if schedule.schedule_type.value != "once" else None
                 task.execution_metadata = {**(task.execution_metadata or {}), "schedule": {
                     "missed_policy": "coalesce", "coalesced_through": now.isoformat(),
@@ -213,7 +213,7 @@ class SchedulerService:
                     continue
                 # Revoke the claim before publishing recovery/uncertainty.
                 task.execution_id = None
-                if task.type in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PREVIEW, TaskType.DOCUMENTATION_PUBLISH}:
+                if task.type in {TaskType.PROJECT_CHECK_IN, TaskType.DOCUMENTATION_PREVIEW, TaskType.DOCUMENTATION_PUBLISH, TaskType.DOCUMENTATION_MAINTENANCE}:
                     task.status = TaskStatus.UNCERTAIN
                     task.completed_at = now
                     task.error = "Project check-in interrupted; model request outcome unknown; automatic execution retry disabled"
@@ -224,6 +224,9 @@ class SchedulerService:
                         task.error = "Documentation preview interrupted; model outcome unknown; automatic execution retry disabled"
                     if task.type == TaskType.DOCUMENTATION_PUBLISH:
                         task.error = "Documentation publishing interrupted; reconcile the existing publication before another write"
+                    if task.type == TaskType.DOCUMENTATION_MAINTENANCE:
+                        task.error = "Documentation maintenance interrupted; reconcile child tasks before another paid assessment"
+                        task.result = {"outcome": "uncertain", "notify": True}
                     ensure_notification(session, task, now)
                     recovered += 1
                     logger.warning("Execution outcome unknown; automatic retry disabled", extra={

@@ -24,6 +24,7 @@ from personal_dot.documentation_policy import (
 )
 from personal_dot.documentation_schemas import DocumentationRequest, EditorOutput, ReviewerOutput
 from personal_dot.models import Task, TaskStatus, TaskType
+from personal_dot.maintenance_control import MaintenanceBlocked, model_fence, paid_intent
 
 Role = Literal['editor', 'reviewer']
 OUTPUT_BYTES = 65_536
@@ -225,8 +226,14 @@ def _call(role: Role, task: Task, state: dict[str, Any], context: dict[str, Any]
         'instructions_sha256': text_hash(instructions(role)),
         'configuration': task.payload['configuration'], 'started_at': datetime.now(UTC).isoformat()}
     _checkpoint(task, state)
+    paid_intent(task, role)
+    if task.maintenance_parent_id is not None:
+        service.settings = service.settings.model_copy(update={'openai_service_tier': 'default'})
     try:
-        turn = service.create_turn(items, instructions=instructions(role))
+        with model_fence(task):
+            turn = service.create_turn(items, instructions=instructions(role))
+    except MaintenanceBlocked:
+        raise
     except (Exception, JobTimeoutException) as exc:
         metadata = failure_metadata(exc.metadata) if isinstance(exc, AgentExecutionError) else {}
         unknown = isinstance(exc, (TimeoutError, JobTimeoutException)) or metadata.get('request_outcome') == 'unknown'
@@ -316,6 +323,9 @@ def execute_documentation(task: Task) -> tuple[dict[str, Any], dict[str, Any]]:
                             'insufficient_evidence': 'insufficient_evidence'}[review.decision]
         state['review_record_sha256'] = digest({'review': state['review'], 'calls': state['calls'], 'outcome': state['outcome']})
         return state, _metadata(state)
+    except MaintenanceBlocked as exc:
+        raise DocumentationError('maintenance_stopped', result=state,
+            metadata={**_metadata(state), 'maintenance_blocker': exc.code}) from None
     except DocumentationError as exc:
         if exc.result is None:
             raise DocumentationError(exc.code, result=state, metadata=_metadata(state)) from None

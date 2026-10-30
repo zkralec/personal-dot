@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     pushover_api_token: SecretStr | None = None
     pushover_user_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
+    openai_service_tier: Literal["default"] | None = None
+    docs_maintenance_live_enabled: bool = False
     openai_model: str = "gpt-6-luna"
     openai_reasoning_effort: Literal[
         "none", "minimal", "low", "medium", "high", "xhigh", "max"

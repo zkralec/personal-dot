@@ -9,13 +9,15 @@ from personal_dot.github_errors import GitHubError
 
 
 class PublishingGitHubClient(GitHubClient):
-    # Administration read is necessary to distinguish legacy branch protection.
+    # Request Administration read only when a protected branch needs legacy inspection.
     permissions = {'contents': 'write', 'pull_requests': 'write', 'metadata': 'read',
-                   'administration': 'read', 'checks': 'read', 'statuses': 'read'}
+                   'checks': 'read', 'statuses': 'read'}
 
     def _allowed(self, method: str, path: str) -> bool:
         if super()._allowed(method, path):
             return True
+        if not getattr(self, 'repository_writes_enabled', True):
+            return False
         if not self._repository or self.permissions.get('contents') != 'write':
             return False
         root = f'/repos/{self.settings.github_owner}/{self._repository}'
@@ -56,11 +58,26 @@ class PublishingGitHubClient(GitHubClient):
             raise GitHubError('response_limit')
         return data
 
+    def repository_metadata(self, root: str) -> dict[str, Any]:
+        data = self.get(root)
+        if 'allow_merge_commit' not in data and self.permissions.get('contents') != 'write':
+            # GitHub hides merge settings from read-scoped installation tokens.
+            # Obtain already-granted publication scopes for this GET only; keep
+            # repository mutations disabled on this preview client.
+            self.repository_writes_enabled = False
+            self.permissions = {**self.permissions, 'contents': 'write', 'pull_requests': 'write'}
+            self.authenticate(self._repository)
+            data = self.get(root)
+        return data
+
     def requirements(self, root: str, branch: str, temporary: str) -> dict[str, Any]:
         current = self.get(root + '/branches/' + quote(branch, safe=''))
         rules = self.listing(root + '/rules/branches/' + quote(branch, safe=''))
         temp_rules = self.listing(root + '/rules/branches/' + quote(temporary, safe=''))
         # Missing/forbidden protection evidence is a blocker, never inferred absent.
+        if current['protected'] and 'administration' not in self.permissions:
+            self.permissions = {**self.permissions, 'administration': 'read'}
+            self.authenticate(self._repository)
         protection = self.get(root + '/branches/' + quote(branch, safe='') + '/protection') if current['protected'] else {}
         return {'base_sha': current['commit']['sha'], 'rules': rules,
                 'temporary_rules': temp_rules, 'protection': protection}
